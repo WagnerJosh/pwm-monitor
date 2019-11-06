@@ -49,6 +49,7 @@ void myEXTI_Init(void);
 unsigned int edge = 0; 								// Edge counter
 uint32_t pulse_count = 0;
 uint32_t res = 0;
+uint32_t adc_offset = 0;
 
 int main(int argc, char* argv[]) {
 
@@ -58,25 +59,39 @@ int main(int argc, char* argv[]) {
 	myGPIOA_Init();		/* Initialize I/O port PA */
 	myTIM2_Init();		/* Initialize timer TIM2 */
 	myEXTI_Init();		/* Initialize EXTI */
+	myADC_Init();		/* Initialize ADC */
+	myDAC_Init();		/* Initialize DAC */
 
 	while (1){
 		// We will be measuring the analog value into Pin 0 here.
 		// We could technically do this as a function and just call it here.
-		int res = myADC();
-				// Nothing is going on here...
+		
+		Call ADC function return value
+		Call DAC Function with ADC value Push to Opto. 
+		Calculate resistance 
+		
+		push to LCD. 
+		
+		
 	}
-
 	return 0;
-
 }
 
 void myGPIOA_Init(){
 
 	RCC->AHBENR |= RCC_AHBENR_GPIOAEN; 			// Enable clock for GPIOA peripheral. Relevant register: RCC->AHBENR
+
+	// Configure PA0
 	GPIOA->MODER &= ~(GPIO_MODER_MODER0);		// Configure PA0 as input. Relevant register: GPIOA->MODER. [00]
-	GPIOA->MODER &= ~(GPIO_MODER_MODER1); 		// Configure PA1 as input. Relevant register: GPIOA->MODER. [00]
 	GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR1); 		// Ensure no pull-up/pull-down for PA1. Relevant register: GPIOA->PUPDR
+
+	// Configure PA1
+	GPIOA->MODER &= ~(GPIO_MODER_MODER1); 		// Configure PA1 as input. Relevant register: GPIOA->MODER. [00]
 	GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR0);		// Ensure no pull-up/pull-down for PA0. Relevant register: GPIOA->PUPDR
+
+	// Configure PA4 as an analog mode pin
+	GPIOA->MODER &= ~(GPIO_MODER_MODER4);		// Configure PA4 as output. Relevant register: GPIOA->MODER. [11]
+	GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR4);		// Ensure no pull-up/pull-down for PA4. Relevant register: GPIOA->PUPDR
 }
 
 void myTIM2_Init(){
@@ -107,15 +122,13 @@ void myEXTI_Init(){							// Initializing EXTI
 	NVIC_EnableIRQ(EXTI0_1_IRQn) ; 				// Enable EXTI1 interrupts in NVIC. Relevant register: NVIC->ISER[0], or use NVIC_EnableIRQ
 }
 
-void myADC_Init(){		// 12-bit -> stored in a left aligned or right aligned 16-bit data register. can set thresholds Upper and lower.
-	// Start ADC Clock
-	// Calibrate ADC. Removes offset error . need to have ADC disabled ( ADEN =0);
-		// wait for ADRDY Flag
-	// We get Calibration factor ( stored in ADC_DR from bits [6:0])
+/*
+	Start ADC Clock
+	 Calibrate ADC. Removes offset error . need to have ADC disabled ( ADEN =0);
+		 wait for ADRDY Flag
+	 We get Calibration factor ( stored in ADC_DR from bits [6:0])
 
-	// ADC needs a Stabilization time t_stab before it starts converting accurately. !!! Factor in ( while x flag = X)
-
-	/*
+	 ADC needs a Stabilization time t_stab before it starts converting accurately. !!! Factor in ( while x flag = X)
 	 * Follow this procedure to enable the ADC:
 		1. Set ADEN=1 in the ADC_CR register.
 		2. Wait until ADRDY=1 in the ADC_ISR register (ADRDY is set after the ADC startup
@@ -129,18 +142,84 @@ void myADC_Init(){		// 12-bit -> stored in a left aligned or right aligned 16-bi
 		2. Set ADDIS=1 in the ADC_CR register.
 		3. If required by the application, wait until ADEN=0 in the ADC_CR register, indicating that
 			the ADC is fully disabled (ADDIS is automatically reset once ADEN=0)
-	 *
 	 */
+void myADC_Init(){		// 12-bit -> stored in a left aligned or right aligned 16-bit data register. can set thresholds Upper and lower.
+	trace_printf("\nADC knock knock\n");
+	//Enable ADC
+	RCC->APB2ENR |= RCC_APB2ENR_ADCEN;				//Enable clock for ADC peripheral. Relevant register: RCC->APB2ENR
 
+	if(ADC_CR_ADEN == 0x00) {						// If calibration is not complete
+		trace_printf("\nADC unlock that door\n");
+		ADC1->CR |= ADC_CR_ADCAL;					// Enable calibration
+		while(ADC_CR_ADCAL == 1);					// Wait for calibration to complete
+		adc_offset = ADC_DR_DATA;					// Store calibration factor [6:0] from ADC_DR
+		trace_printf("\nADC SHE UNLOCKED ENTER AT OWN RISK\n");
+	}
+
+	//Configure ADC: continuous and overrun
+	ADC1->CFGR1 |= ADC_CFGR1_OVRMOD;				//overrun
+	ADC1->CFGR1 |= ADC_CFGR1_CONT;					//continuous
+	//ADC1->CFGR1 |= ADC_CFGR1_RES;					//set resolution (maybe to 12 = [00]) (I think it is already set there?)
+
+
+	//Select operating channel (output pin)
+		//ADC_IN0
+	ADC1->CHSELR |= ADC_CHSELR_CHSEL0;				//Channel IN0 is selected to be converted
+
+	ADC1->CR |= ADC_CR_ADEN;						//Enabled ADC
+
+	// Waiting for ADC to be ready for conversion
+	trace_printf("\nADC TEEEHEE\n");
+
+	while(ADC_ISR_ADRDY == 0);						// True when not ready for conversion
+
+	trace_printf("\nADC IS IN DA HOUSE\n");
 
 }
+
 void myDAC_Init(){
-	// Initialize DAC
+	// Enable clock
+	RCC->APB1ENR |= RCC_APB1ENR_DACEN;			//Enable clock for DAC peripheral. Relevant register: RCC->APB1ENR
+	// Enable DAC
+	DAC->CR |= DAC_CR_EN1;
 }
-int myADC(){
-	// ONLY DELETE ONCE WE HAVE INITIALIZED PIN 0.
 
+//drink the potion, convert, and be potent -_-
+uint32_t ADC_Potent(){
+	// ONLY DELETE ONCE WE HAVE INITIALIZED PIN 0.
+	//drink up bitches
+	//start conversion
+	ADC1->CR |= ADC_CR_ADSTART;
+
+	//wait for end of conversion
+	while(ADC_ISR_EOC == 0x00);
+
+	//reset flag
+	ADC1->ISR |= ADC_ISR_EOC;
+
+	//push value
+	uint32_t potential = ADC_DR_DATA - adc_offset;
+
+	return potential;
+	// CONVERSION COMPLETE WELCOME JESUS YOU HAVE UNLOCKED YOUR POTENTIAL
 }
+
+uint32_t OPTO_DAC(uint32_t value) {
+	//take value and do a DAC conversion
+	// take ADC input value
+		//normalize value through dividing by MAX DAC res
+		// Take ADC value divide by MAX ADC res. Multiply by MAx DAC res. = DAC value
+	uint32_t opto_out = 0;
+
+	//Push output value
+	return opto_out;
+
+	//pysch you ain't jesus, now you peasant
+
+	//time to die
+}
+
+
 void TIM2_IRQHandler() {	/* This handler is declared in system/src/cmsis/vectors_stm32f0xx.c */
 
 	if ((TIM2->SR & TIM_SR_UIF) != 0) 	{ 		// Check if update interrupt flag is indeed set
