@@ -44,16 +44,42 @@
 void myGPIOA_Init(void);
 void myTIM2_Init(void);
 void myEXTI_Init(void);
+void myADC_Init(void);		/* Initialize ADC */
+void myDAC_Init(void);
 
 /* Your global variables... */
 unsigned int edge = 0; 								// Edge counter
 uint32_t pulse_count = 0;
-uint32_t res = 0;
 uint32_t adc_offset = 0;
+
+//uint32_t ADC_MAX_Value = ;  						//ADC supply requirements: 2.4 V to 3.6 V
+//uint32_t ADC_resolution = 4096 ;
+
+//uint32_t DAC_MAX_Value = ;
+//uint32_t DAC_resolution = ;
+
+uint32_t ADC_pot(){
+
+	//drink up bitches and start conversion
+	ADC1->CR |= ADC_CR_ADSTART;
+	trace_printf("Conversion Therapy...\n");
+	//wait for end of conversion
+	while(!(ADC1->ISR & ADC_ISR_EOC));
+	trace_printf("... Complete!\n");
+	//reset flag
+	ADC1->ISR &= ~(ADC_ISR_EOC);
+
+	//push value
+	uint32_t potential = ((ADC1->DR)& ADC_DR_DATA) - adc_offset;
+	trace_printf("\nADC_DR_DATA value: %u\n",ADC_DR_DATA);
+	trace_printf("\nOffset: %u\n", adc_offset);
+	return potential;
+	// CONVERSION COMPLETE WELCOME JESUS YOU HAVE UNLOCKED YOUR POTENTIAL
+}
 
 int main(int argc, char* argv[]) {
 
-	trace_printf("This is Part 2 of Introductory Lab...\n");
+	trace_printf("This is the Final Project...\n");
 	trace_printf("System clock: %u Hz\n", SystemCoreClock);
 
 	myGPIOA_Init();		/* Initialize I/O port PA */
@@ -63,16 +89,21 @@ int main(int argc, char* argv[]) {
 	myDAC_Init();		/* Initialize DAC */
 
 	while (1){
-		// We will be measuring the analog value into Pin 0 here.
-		// We could technically do this as a function and just call it here.
-		
+
+		uint32_t input = ADC_pot();
+		trace_printf("\nADC Value: %u\n", input);
+
+		/* Store DAC Value in Output buffer */
+		DAC->DHR12R1 = input;
+		trace_printf("\nDAC Output buffer: %u\n", DAC->DHR12R1);
+		/*
+		We will be measuring the analog value into Pin 0 here.
+		We could technically do this as a function and just call it here.
 		Call ADC function return value
-		Call DAC Function with ADC value Push to Opto. 
-		Calculate resistance 
-		
-		push to LCD. 
-		
-		
+		Call DAC Function with ADC value Push to Opto.
+		Calculate resistance
+		push to LCD.
+		 */
 	}
 	return 0;
 }
@@ -112,7 +143,7 @@ void myTIM2_Init(){
 	TIM2->DIER |= TIM_DIER_UIE; 				// Enable update interrupt generation  Relevant register: TIM2->DIER.
 }
 
-void myEXTI_Init(){							// Initializing EXTI
+void myEXTI_Init(){								// Initializing EXTI
 
 	SYSCFG->EXTICR[0]= SYSCFG_EXTICR1_EXTI1_PA; // Map EXTI1 line to PA1. Relevant register: SYSCFG->EXTICR[0]
 	EXTI->RTSR |= EXTI_RTSR_TR1; 				// EXTI1 line interrupts: set rising-edge trigger.Relevant register: EXTI->RTSR
@@ -122,37 +153,16 @@ void myEXTI_Init(){							// Initializing EXTI
 	NVIC_EnableIRQ(EXTI0_1_IRQn) ; 				// Enable EXTI1 interrupts in NVIC. Relevant register: NVIC->ISER[0], or use NVIC_EnableIRQ
 }
 
-/*
-	Start ADC Clock
-	 Calibrate ADC. Removes offset error . need to have ADC disabled ( ADEN =0);
-		 wait for ADRDY Flag
-	 We get Calibration factor ( stored in ADC_DR from bits [6:0])
-
-	 ADC needs a Stabilization time t_stab before it starts converting accurately. !!! Factor in ( while x flag = X)
-	 * Follow this procedure to enable the ADC:
-		1. Set ADEN=1 in the ADC_CR register.
-		2. Wait until ADRDY=1 in the ADC_ISR register (ADRDY is set after the ADC startup
-			time). This can be handled by interrupt if the interrupt is enabled by setting the
-			ADRDYIE bit in the ADC_IER register.
-
-		Follow this procedure to disable the ADC:
-		1. Check that ADSTART=0 in the ADC_CR register to ensure that no conversion is
-			ongoing. If required, stop any ongoing conversion by writing 1 to the ADSTP bit in the
-			the ADC_CR register and waiting until this bit is read at 0.
-		2. Set ADDIS=1 in the ADC_CR register.
-		3. If required by the application, wait until ADEN=0 in the ADC_CR register, indicating that
-			the ADC is fully disabled (ADDIS is automatically reset once ADEN=0)
-	 */
 void myADC_Init(){		// 12-bit -> stored in a left aligned or right aligned 16-bit data register. can set thresholds Upper and lower.
 	trace_printf("\nADC knock knock\n");
-	//Enable ADC
+	//Enable ADC RCC
 	RCC->APB2ENR |= RCC_APB2ENR_ADCEN;				//Enable clock for ADC peripheral. Relevant register: RCC->APB2ENR
 
 	if(ADC_CR_ADEN == 0x00) {						// If calibration is not complete
 		trace_printf("\nADC unlock that door\n");
 		ADC1->CR |= ADC_CR_ADCAL;					// Enable calibration
 		while(ADC_CR_ADCAL == 1);					// Wait for calibration to complete
-		adc_offset = ADC_DR_DATA;					// Store calibration factor [6:0] from ADC_DR
+		adc_offset = ((ADC1->DR)& ADC_DR_DATA);					// Store calibration factor [6:0] from ADC_DR
 		trace_printf("\nADC SHE UNLOCKED ENTER AT OWN RISK\n");
 	}
 
@@ -161,62 +171,34 @@ void myADC_Init(){		// 12-bit -> stored in a left aligned or right aligned 16-bi
 	ADC1->CFGR1 |= ADC_CFGR1_CONT;					//continuous
 	//ADC1->CFGR1 |= ADC_CFGR1_RES;					//set resolution (maybe to 12 = [00]) (I think it is already set there?)
 
-
-	//Select operating channel (output pin)
-		//ADC_IN0
+	//Select operating channel (output pin) - ADC_IN0
 	ADC1->CHSELR |= ADC_CHSELR_CHSEL0;				//Channel IN0 is selected to be converted
-
 	ADC1->CR |= ADC_CR_ADEN;						//Enabled ADC
 
 	// Waiting for ADC to be ready for conversion
 	trace_printf("\nADC TEEEHEE\n");
-
 	while(ADC_ISR_ADRDY == 0);						// True when not ready for conversion
-
 	trace_printf("\nADC IS IN DA HOUSE\n");
-
 }
 
 void myDAC_Init(){
 	// Enable clock
 	RCC->APB1ENR |= RCC_APB1ENR_DACEN;			//Enable clock for DAC peripheral. Relevant register: RCC->APB1ENR
+
+	// Enable Output buffer
+	DAC->CR |= DAC_CR_BOFF1;
+
 	// Enable DAC
 	DAC->CR |= DAC_CR_EN1;
 }
 
-//drink the potion, convert, and be potent -_-
-uint32_t ADC_Potent(){
-	// ONLY DELETE ONCE WE HAVE INITIALIZED PIN 0.
-	//drink up bitches
-	//start conversion
-	ADC1->CR |= ADC_CR_ADSTART;
 
-	//wait for end of conversion
-	while(ADC_ISR_EOC == 0x00);
 
-	//reset flag
-	ADC1->ISR |= ADC_ISR_EOC;
-
-	//push value
-	uint32_t potential = ADC_DR_DATA - adc_offset;
-
-	return potential;
-	// CONVERSION COMPLETE WELCOME JESUS YOU HAVE UNLOCKED YOUR POTENTIAL
-}
-
-uint32_t OPTO_DAC(uint32_t value) {
-	//take value and do a DAC conversion
-	// take ADC input value
-		//normalize value through dividing by MAX DAC res
-		// Take ADC value divide by MAX ADC res. Multiply by MAx DAC res. = DAC value
-	uint32_t opto_out = 0;
-
-	//Push output value
-	return opto_out;
-
-	//pysch you ain't jesus, now you peasant
-
-	//time to die
+uint32_t freq_generator(uint32_t value) {
+	/*If this function is not operating correctly may want to offset the output range by the diode drop across the
+	 * Optocoupler ~ 0.6V for VBE and 0.6V for VBC and 0.229V from AC
+	 */
+	return value;
 }
 
 
