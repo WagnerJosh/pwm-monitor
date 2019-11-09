@@ -1,13 +1,13 @@
 
 /* LCD Code for ECE 355 Project */
 
-
 #include <stdio.h>
-#include "stm32f0xx_spi.c"
+
 #include "stm32f0xx_rcc.c"
 #include "stm32f0xx_gpio.c"
 #include "diag/Trace.h"
 #include "cmsis/cmsis_device.h"
+#include "stm32f0xx_spi.c"
 
 
 /* Pragma's */
@@ -16,8 +16,20 @@
 #pragma GCC diagnostic ignored "-Wmissing-declarations"
 #pragma GCC diagnostic ignored "-Wreturn-type"
 
+
+/* defines */
 #define myTIM14_PRESCALER ((uint16_t)0x0000) 		/* Clock prescaler for TIM14 timer: ADD STUFF */
 #define myTIM14_PERIOD ((uint32_t)0xFFFFFFFF)	 	/* Maximum possible setting for overflow */
+
+#define SPI_Direction_1Line_Tx ((uint16_t)0xC000)
+#define SPI_Mode_Master ((uint16_t)0x0104)
+#define SPI_DataSize_8b ((uint16_t)0x0700)
+#define SPI_CPOL_Low ((uint16_t)0x0000)
+#define SPI_CPHA_1Edge ((uint16_t)0x0000)
+#define SPI_NSS_Soft SPI_CR1_SSM
+#define SPI_FirstBit_MSB ((uint16_t)0x0000)
+
+#define SPI_CR1_SSM ((uint16_t)0x0200)
 
 /*
 Functions
@@ -25,7 +37,6 @@ Functions
 	Initialize GPIO Pins
 	Initialize SPI
 	Initialize timers [Latch Clock: LCK][Shift Register Clock: SCK]
-
 	Convert to ASCII <- done in write functions
 	Clear Display
 	Write Display
@@ -38,43 +49,30 @@ Functions
 
 /* Initialization Code */
 
-void myGPIO_Init(){
-	// initilize all pins that are associated with the LCD.
-	/*
-		LCD_D4
-		LCD_D5
-		LCD_D6
-		LCD_D7
-		RS
-		EN
-	 WHAT PINS ARE WE USING
-	 */
-    RCC->AHBENR |= RCC_AHBENR_GPIOAEN; 			// Enable clock for GPIOA peripheral. Relevant register: RCC->AHBENR
+void myGPIOB_Init(){
+	// initilize all pins that are associated with the LCD including LCK.
 
-    // Configure PA0
-    GPIOA->MODER &= ~(GPIO_MODER_MODER0);		// Configure PA0 as input. Relevant register: GPIOA->MODER. [00]
-    GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR1); 		// Ensure no pull-up/pull-down for PA1. Relevant register: GPIOA->PUPDR
+    RCC->AHBENR |= RCC_AHBENR_GPIOBEN; 			// Enable clock for GPIOB peripheral. Relevant register: RCC->AHBENR
 
-    // Configure PA1
-    GPIOA->MODER &= ~(GPIO_MODER_MODER1); 		// Configure PA1 as input. Relevant register: GPIOA->MODER. [00]
-    GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR0);		// Ensure no pull-up/pull-down for PA0. Relevant register: GPIOA->PUPDR
+    // Configure PB3 as SPI-SCK
+    GPIOB->MODER &= ~(GPIO_MODER_MODER3_1);		// Configure PB3 as alternate function. Relevant register: GPIOB->MODER. [11]
+    GPIOB->PUPDR &= ~(GPIO_PUPDR_PUPDR3); 		// Ensure no pull-up/pull-down for PA1. Relevant register: GPIOB->PUPDR
 
-    // Configure PA4 as an analog mode pin
-    GPIOA->MODER &= ~(GPIO_MODER_MODER4);		// Configure PA4 as output. Relevant register: GPIOA->MODER. [11]
-    GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR4);		// Ensure no pull-up/pull-down for PA4. Relevant register: GPIOA->PUPDR
+    // Configure PB5 as SPI-MOSI
+    GPIOB->MODER &= ~(GPIO_MODER_MODER5_1); 		// Configure PB3 as alternate function. Relevant register: GPIOB->MODER. [11]
+    GPIOB->PUPDR &= ~(GPIO_PUPDR_PUPDR5);		// Ensure no pull-up/pull-down for PA0. Relevant register: GPIOB->PUPDR
+
+    // Configure PB4 as LCK
+    GPIOB->MODER &= ~(GPIO_MODER_MODER4_0);		// Configure PA4 as output. Relevant register: GPIOA->MODER. [11]
+    GPIOB->PUPDR &= ~(GPIO_PUPDR_PUPDR4);		// Ensure no pull-up/pull-down for PA4. Relevant register: GPIOA->PUPDR
 
 }
 
-void myLCK_Init(){
-	// initialize LCK
-}
 
-void mySCK_Init(){
-	// initialize SCK
-}
 
 void mySPI_Init(){
-	// call all SPI initilization Functions
+	// call all SPI initialization Functions
+	RCC->APB2ENR |= RCC_APB2ENR_SPI1EN; 		//Enable SPI1 clock
 
 	//Given in class
 	SPI_InitTypeDef SPI_InitStructInfo;
@@ -86,7 +84,7 @@ void mySPI_Init(){
     SPI_InitStruct->SPI_CPOL = SPI_CPOL_Low;
     SPI_InitStruct->SPI_CPHA = SPI_CPHA_1Edge;
     SPI_InitStruct->SPI_NSS = SPI_NSS_Soft;
-    SPI_InitStruct->SPI_BaudRatePrescaler = ... ;
+    SPI_InitStruct->SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_256;	//Biggest pre-scaler
     SPI_InitStruct->SPI_FirstBit = SPI_FirstBit_MSB;
     SPI_InitStruct->SPI_CRCPolynomial = 7;
 
@@ -95,18 +93,36 @@ void mySPI_Init(){
 }
 
 void myLCD_init(){
-	// change to use 4 bit interface
+
+
 }
 
 /* Functions */
 
-void write_Freq(uint32_t frequency){ // takes in frequency and displays it.
+void mySPI_SendData(uint8_t data) {
+	/* Force you LCK signal to 0 */
+	GPIOB->BRR = GPIO_Pin_4;
+
+	/* Wait until SPI1 is ready (TXE = 1 or BSY = 0) */
+	while((SPI1->SR & SPI_SR_TXE) == 0x00 || (SPI1->SR & SPI_SR_BSY) != 0x00);
+
+	/* Assumption: your data holds 8 bits to be sent*/
+	SPI_SendData(SPI1, data);
+
+	/* Wait until SPI1 is not busy (BSY = 0) */
+	while((SPI1->SR & SPI_SR_BSY) != 0x00);
+
+	/* Force your LCK signal to 1 */
+	GPIOB->BRR = GPIO_Pin_4;
+}
+
+void write_Freq(uint32_t frequency){ // ( AKA_ write High Part of LCD) takes in frequency and displays it.
 	//take in freq
 	//convert to ASCII
 	//Write to LCD
 }
 
-void write_Res(uint32_t resistance){ // takes in resistance and displays it.
+void write_Res(uint32_t resistance){ // ( AKA_ Write Low part of LCD) takes in resistance and displays it.
 	//take in resistance
 	//convert to ASCII
 	//Write to LCD
@@ -114,6 +130,7 @@ void write_Res(uint32_t resistance){ // takes in resistance and displays it.
 
 void clear_LCD(){
 	// Clear the screen to be able to take new values.
+
 }
 
 void Delay_Init() {
@@ -154,10 +171,4 @@ void Delay(uint32_t time){ // Time is in milliseconds
     TIM14->SR &= ~(TIM_SR_UIF);				// Clear update interrupt flag.
     TIM14->CR1 |= TIM_CR1_CEN;		 		// Restart stopped timer.
 
-
 }
-
-
-
-
-
