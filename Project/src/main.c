@@ -40,6 +40,9 @@
 
 #define myTIM2_PRESCALER ((uint16_t)0x0000) 		/* Clock prescaler for TIM2 timer: no prescaling */
 #define myTIM2_PERIOD ((uint32_t)0xFFFFFFFF)	 	/* Maximum possible setting for overflow */
+#define myTIM3_PRESCALER ((uint16_t)0x0000)
+#define myTIM3_PERIOD ((uint32_t)0xFFFFFFFF)
+
 
 void myGPIOA_Init(void);
 void myTIM2_Init(void);
@@ -143,6 +146,33 @@ void myTIM2_Init(){
 	TIM2->DIER |= TIM_DIER_UIE; 				// Enable update interrupt generation  Relevant register: TIM2->DIER.
 }
 
+//NEED TO ADJUST VALUES
+void myTIM3_Init(){
+
+	RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;			//Enable clock for TIM2 peripheral. Relevant register: RCC->APB1ENR
+
+	/* Configure TIM2: buffer auto-reload, count up, stop on overflow,
+	   enable update events, interrupt on overflow only */
+
+	TIM3->CR1 = ((uint16_t)0x008C); 			// Relevant register: TIM2->CR1
+	TIM3->PSC = myTIM3_PRESCALER; 				// Set clock prescaler value
+	TIM3->ARR = myTIM3_PERIOD; 					// Set auto-reloaded delay
+	TIM3->EGR = ((uint16_t)0x0001); 			// Update timer registers.  Relevant register: TIM2->EGR
+
+	NVIC_SetPriority(TIM3_IRQn, 0); 			// Relevant register: NVIC->IP[3], or use NVIC_SetPriority. Assign TIM2 interrupt priority = 0 in NVIC.
+	NVIC_EnableIRQ(TIM3_IRQn); 					// Enable TIM2 interrupts in NVIC. Relevant register: NVIC->ISER[0], or use NVIC_EnableIRQ.
+
+	TIM3->DIER |= TIM_DIER_UIE; 				// Enable update interrupt generation  Relevant register: TIM2->DIER.
+
+	TIM3->CR1 |= TIM_CR1_CEN; 				//They added a line to activate timer, not sure if necessary
+}
+
+//create tim3 initialization
+//replicate isr for tim3
+// using tim 3 because it is general purpose like tim2
+// we need to put custom scalers
+	//prescaler and autoreload must be set
+
 void myEXTI_Init(){								// Initializing EXTI
 
 	SYSCFG->EXTICR[0]= SYSCFG_EXTICR1_EXTI1_PA; // Map EXTI1 line to PA1. Relevant register: SYSCFG->EXTICR[0]
@@ -208,6 +238,15 @@ void TIM2_IRQHandler() {	/* This handler is declared in system/src/cmsis/vectors
 		trace_printf("\n*** Overflow! ***\n");
 		TIM2->SR &= ~(TIM_SR_UIF);				// Clear update interrupt flag. Relevant register: TIM2->SR. UIF : Update Interrupt flag
 		TIM2->CR1 |= TIM_CR1_CEN;		 		// Restart stopped timer. Relevant register: TIM2->CR1
+	}
+}
+//TIMER FOR LCD
+void TIM3_IRQHandler() {	/* This handler is declared in system/src/cmsis/vectors_stm32f0xx.c */
+
+	if ((TIM3->SR & TIM_SR_UIF) != 0) 	{ 		// Check if update interrupt flag is indeed set
+		trace_printf("\n*** Overflow! ***\n");
+		TIM3->SR &= ~(TIM_SR_UIF);				// Clear update interrupt flag. Relevant register: TIM3->SR. UIF : Update Interrupt flag
+		TIM3->CR1 |= TIM_CR1_CEN;		 		// Restart stopped timer. Relevant register: TIM3->CR1
 	}
 }
 
