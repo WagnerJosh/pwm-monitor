@@ -31,20 +31,6 @@
 
 #define SPI_CR1_SSM ((uint16_t)0x0200)
 
-/*
-Functions
-	Initialize the LCD
-	Initialize GPIO Pins
-	Initialize SPI
-	Initialize timers [Latch Clock: LCK][Shift Register Clock: SCK]
-	Convert to ASCII <- done in write functions
-	Clear Display
-	Write Display
-		Write Frequency
-		Write Resistance
-	Delay
-*/
-
 /* Global Variable Declarations */
 
 /* Initialization Code */
@@ -67,8 +53,6 @@ void myGPIOB_Init(){
     GPIOB->PUPDR &= ~(GPIO_PUPDR_PUPDR4);		// Ensure no pull-up/pull-down for PA4. Relevant register: GPIOA->PUPDR
 
 }
-
-
 
 void mySPI_Init(){
 	// call all SPI initialization Functions
@@ -93,6 +77,7 @@ void mySPI_Init(){
 }
 
 void myLCD_init(){
+// Initialize  LCD. need to change to 4bit Mode
 
 
 }
@@ -116,20 +101,34 @@ void mySPI_SendData(uint8_t data) {
 	GPIOB->BRR = GPIO_Pin_4;
 }
 
+
+void mySPI_sendcontrol(uint8_t address, uint8_t type){ //sends LCD control commands
+  uint8_t
+
+}
 void write_Freq(uint32_t frequency){ // ( AKA_ write High Part of LCD) takes in frequency and displays it.
 	//take in freq
 	//convert to ASCII
 	//Write to LCD
+
+  // Set write address location  row* 0x40 column* 0x80
+  // initilaize 5 char array
+  //load frequency into array
+  // send buffer to display
 }
 
 void write_Res(uint32_t resistance){ // ( AKA_ Write Low part of LCD) takes in resistance and displays it.
 	//take in resistance
 	//convert to ASCII
 	//Write to LCD
+
+  // set write address
+
 }
 
 void clear_LCD(){
 	// Clear the screen to be able to take new values.
+  mySPI_send3(0x01, LCD_command);			// Clear Display
 
 }
 
@@ -141,7 +140,7 @@ void Delay_Init() {
        enable update events, interrupt on overflow only */
 
     TIM14->CR1 = ((uint16_t)0x008C); 			// Relevant register: TIM2->CR1
-    TIM14->PSC = myTIM14_PRESCALER; 				// Set clock prescaler value
+    TIM14->PSC = myTIM14_PRESCALER; 			// Set clock prescaler value
     TIM14->ARR = myTIM14_PERIOD; 					// Set auto-reloaded delay
     TIM14->EGR = ((uint16_t)0x0001); 			// Update timer registers.  Relevant register: TIM2->EGR
 
@@ -155,20 +154,18 @@ void Delay_Init() {
 }
 
 
-void Delay(uint32_t time){ // Time is in milliseconds
-	// delay the system. ....
+void Delay(uint32_t time) { // delay the system. .... Time is in milliseconds
+
+  uint16_t clock = time // calculate number of clock cycles that correspond to ms time.
 
 	TIM14->CNT |= 0x00;     //Clear timer
+	TIM14->ARR = clock;      //Autoload time into timer
+  TIM14->EGR = ((uint16_t)0x0001); // Update timer registers
+  TIM14->CR1 |= TIM_CR1_CEN;      //Enabled counter
 
-	TIM14->ARR = time;      //Autoload time into timer
+  while ((TIM14->SR & TIM_SR_UIF) != 0); //Loop until interrupt flag gets set
 
-    TIM14->EGR = ((uint16_t)0x0001); // Update timer registers
-
-    TIM14->CR1 |= TIM_CR1_CEN;      //Enabled counter
-
-    while ((TIM14->SR & TIM_SR_UIF) != 0); //Loop until interrupt flag gets set
-
-    TIM14->SR &= ~(TIM_SR_UIF);				// Clear update interrupt flag.
-    TIM14->CR1 |= TIM_CR1_CEN;		 		// Restart stopped timer.
+  TIM14->SR &= ~(TIM_SR_UIF);				// Clear update interrupt flag.
+  TIM14->CR1 |= TIM_CR1_CEN;		 		// Restart stopped timer.
 
 }
