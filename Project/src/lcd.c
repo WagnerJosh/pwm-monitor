@@ -11,13 +11,18 @@
 
 
 /* Pragma's */
+/*****************************************************************************************************************/
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic ignored "-Wmissing-declarations"
 #pragma GCC diagnostic ignored "-Wreturn-type"
+/*****************************************************************************************************************/
 
 
 /* defines */
+/*****************************************************************************************************************/
+
 #define myTIM14_PRESCALER ((uint16_t)0x0000) 		/* Clock prescaler for TIM14 timer: ADD STUFF */
 #define myTIM14_PERIOD ((uint32_t)0xFFFFFFFF)	 	/* Maximum possible setting for overflow */
 
@@ -31,10 +36,11 @@
 
 #define SPI_CR1_SSM ((uint16_t)0x0200)
 
+/*****************************************************************************************************************/
+
 /* Global Variable Declarations */
 
-/* Initialization Code */
-
+/******************************************** Initialization Code **************************************************/
 void myGPIOB_Init(){
 	// initilize all pins that are associated with the LCD including LCK.
 
@@ -76,62 +82,6 @@ void mySPI_Init(){
     SPI_Cmd(SPI1, ENABLE);
 }
 
-void myLCD_init(){
-// Initialize  LCD. need to change to 4bit Mode
-
-
-}
-
-/* Functions */
-
-void mySPI_SendData(uint8_t data) {
-	/* Force you LCK signal to 0 */
-	GPIOB->BRR = GPIO_Pin_4;
-
-	/* Wait until SPI1 is ready (TXE = 1 or BSY = 0) */
-	while((SPI1->SR & SPI_SR_TXE) == 0x00 || (SPI1->SR & SPI_SR_BSY) != 0x00);
-
-	/* Assumption: your data holds 8 bits to be sent*/
-	SPI_SendData(SPI1, data);
-
-	/* Wait until SPI1 is not busy (BSY = 0) */
-	while((SPI1->SR & SPI_SR_BSY) != 0x00);
-
-	/* Force your LCK signal to 1 */
-	GPIOB->BRR = GPIO_Pin_4;
-}
-
-
-void mySPI_sendcontrol(uint8_t address, uint8_t type){ //sends LCD control commands
-  uint8_t
-
-}
-void write_Freq(uint32_t frequency){ // ( AKA_ write High Part of LCD) takes in frequency and displays it.
-	//take in freq
-	//convert to ASCII
-	//Write to LCD
-
-  // Set write address location  row* 0x40 column* 0x80
-  // initilaize 5 char array
-  //load frequency into array
-  // send buffer to display
-}
-
-void write_Res(uint32_t resistance){ // ( AKA_ Write Low part of LCD) takes in resistance and displays it.
-	//take in resistance
-	//convert to ASCII
-	//Write to LCD
-
-  // set write address
-
-}
-
-void clear_LCD(){
-	// Clear the screen to be able to take new values.
-  mySPI_send3(0x01, LCD_command);			// Clear Display
-
-}
-
 void Delay_Init() {
 
     RCC->APB1ENR |= RCC_APB1ENR_TIM14EN;			//Enable clock for TIM2 peripheral. Relevant register: RCC->APB1ENR
@@ -153,8 +103,69 @@ void Delay_Init() {
     //They added a line to activate timer, not sure if necessary
 }
 
+void myLCD_init(){
+// Initialize  LCD. need to change to 4bit Mode
+}
 
-void Delay(uint32_t time) { // delay the system. .... Time is in milliseconds
+/*****************************************************************************************************************/
+
+/******************************************** Functions **********************************************************/
+void mySPI_SendData(uint8_t data) {
+	/* Force you LCK signal to 0 */
+	GPIOB->BRR = GPIO_Pin_4;
+
+	/* Wait until SPI1 is ready (TXE = 1 or BSY = 0) */
+	while((SPI1->SR & SPI_SR_TXE) == 0x00 || (SPI1->SR & SPI_SR_BSY) != 0x00);
+
+	/* Assumption: your data holds 8 bits to be sent*/
+	SPI_SendData(SPI1, data);
+
+	/* Wait until SPI1 is not busy (BSY = 0) */
+	while((SPI1->SR & SPI_SR_BSY) != 0x00);
+
+	/* Force your LCK signal to 1 */
+	GPIOB->BRR = GPIO_Pin_4;
+}
+
+void mySPI_sendControl(uint8_t address, uint8_t type){ //sends LCD control commands including addressing, clearing,
+  uint8_t highhalf = (0xF0 & (address>>4); // generate highhalf address. Shifted 4 to left
+  uint8_t lowhalf = (0x0F & address); // generate lowhalf address
+
+  mySPI_SendData((0x00 | type | highhalf)); // disable LCD, push type, highhalf,
+  mySPI_SendData((0x80 | type | highhalf)); // enable LCD, push type, highhalf,
+  mySPI_SendData((0x00 | type | highhalf)); // disable LCD, push type, highhalf,
+
+  mySPI_SendData((0x00 | type | lowhalf)); // disable LCD, push type, highhalf,
+  mySPI_SendData((0x80 | type | lowhalf)); // enable LCD, push type, highhalf,
+  mySPI_SendData((0x00 | type | lowhalf)); // disable LCD, push type, highhalf,
+}
+void write_Freq(float frequency){ // ( AKA_ write High Part of LCD) takes in frequency and displays it.
+  // take in frequency
+    // load bit by bit into an array
+    // convert each bit into asciiDigit
+    // add ohm symbol or Oh
+  // Push indiviually to the LCD.
+  //
+
+
+}
+
+void write_Res(float resistance){ // ( AKA_ Write Low part of LCD) takes in resistance and displays it.
+	//take in resistance
+	//convert to ASCII
+	//Write to LCD
+
+  // set write address
+
+}
+
+void clear_LCD(){
+	// Clear the screen to be able to take new values.
+  mySPI_sendControl(0x01, LCD_command);			// Clear Display
+}
+
+void Delay(uint32_t time)
+{ // delay the system. .... Time is in milliseconds
 
   uint16_t clock = time // calculate number of clock cycles that correspond to ms time.
 
@@ -169,3 +180,4 @@ void Delay(uint32_t time) { // delay the system. .... Time is in milliseconds
   TIM14->CR1 |= TIM_CR1_CEN;		 		// Restart stopped timer.
 
 }
+/*****************************************************************************************************************/
