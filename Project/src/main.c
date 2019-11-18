@@ -76,8 +76,8 @@ void myLCD_Init(void);
 uint32_t ADC_pot();
 void mySPI_SendData(uint8_t data);
 void mySPI_sendControl(uint8_t address, uint8_t type);
-void write_Freq(float frequency);
-void write_Res(float resistance);
+void write_Freq(uint32_t frequency);
+void write_Res(uint32_t resistance);
 void set_Address(uint8_t row, uint8_t column);
 void Delay(uint32_t time);
 
@@ -344,13 +344,15 @@ uint32_t ADC_pot(){
 	ADC1->ISR &= ~(ADC_ISR_EOC);
 
 	//push value
-	uint32_t potential = ((ADC1->DR)& ADC_DR_DATA) - adc_offset;
+	//uint32_t potential = ((ADC1->DR)& ADC_DR_DATA) - adc_offset;
 	//trace_printf("\nADC_DR_DATA value: %u\n",ADC_DR_DATA);
 	//trace_printf("\nPotential: %u\n", potential);
 
-	Delay(10);
+
+	DAC->DHR12R1 =( 1350 + (0.666)*ADC1->DR);// potential;
+	//Delay(50);
 	//trace_printf("\nPotential: %u\n", DAC->DHR12R1);
-	return potential;
+	return (ADC1->DR);
 	// CONVERSION COMPLETE WELCOME JESUS YOU HAVE UNLOCKED YOUR POTENTIAL
 }
 
@@ -396,7 +398,7 @@ void mySPI_sendControl(uint8_t location, uint8_t type){ //sends LCD control comm
 
 /******************************************** LCD Helper Functions **************************************************/
 //checked minor differnce in loading freq
-void write_Freq(float frequency){ // ( AKA_ write High Part of LCD) takes in frequency and displays it.
+void write_Freq(uint32_t frequency){ // ( AKA_ write High Part of LCD) takes in frequency and displays it.
 
 	// ADD STATEMENT FOR FREQ = 0 CASE.
 
@@ -438,7 +440,7 @@ void write_Freq(float frequency){ // ( AKA_ write High Part of LCD) takes in fre
 
 // ( AKA_ Write Low part of LCD) takes in resistance and displays it.
 //Checked
-void write_Res(float resistance){ // add statement for res=0 case.
+void write_Res(uint32_t resistance){ // add statement for res=0 case.
 	//trace_printf("\nWriting on the Resistance\n");
 
 	set_Address(1, 2);
@@ -527,27 +529,29 @@ void TIM2_IRQHandler() {
 /* This handler is declared in system/src/cmsis/vectors_stm32f0xx.c */
 void EXTI0_1_IRQHandler(){
 	//trace_printf("\n EXTI 1 is Interrupting you\n");
+
 	EXTI->IMR &= ~EXTI_IMR_MR1; 						// Mask EXTI1 interrupt
-	/* Your local variables... */
-	float freq = 0.00;
-	uint32_t pulse_count = 0.00;
+
+	uint32_t freq = 0;
+	uint32_t pulse_count = 0;
 
 	if ((EXTI->PR & EXTI_PR_PR1) != 0) {  				// Check if EXTI1 interrupt pending flag is indeed set
-		edge++;											/* if entered interupt and edge was detected. Therefore to keep track edge counter is incremented.
+														/* if entered interupt and edge was detected. Therefore to keep track edge counter is incremented.
 														If first interrupt thrown, edge = 1 enter first statment. Else its end of signal edge = 2 and enter second statement*/
-		if (edge == 1) {									// Check if this is first ege
-			TIM2 ->CNT = (uint32_t) 0x00; 				// CLEAR COUNT REGISTER
+		if (edge == 0) {									// Check if this is first ege
+			TIM2 ->CNT = 0; 				// CLEAR COUNT REGISTER
 			TIM2 ->CR1 |= TIM_CR1_CEN;					// START THE TIMER
+			edge =1;
 
 		} else {											// Else (this is the second edge):
 			edge = 0;
-			TIM2->CR1 &= ~TIM_CR1_CEN;					//	- Stop timer (TIM2->CR1).
 			pulse_count = TIM2 -> CNT;					//	- Read out count register (TIM2->CNT).
-			trace_printf("  Pulses: %f \n \n",pulse_count);
-			freq = ((float) SystemCoreClock)/pulse_count;	//	- Calculate signal frequency.
+			TIM2->CR1 = 0;					//	- Stop timer (TIM2->CR1).
+			trace_printf("  Pulses: %u \n \n",pulse_count);
+			freq = (SystemCoreClock)/pulse_count;	//	- Calculate signal frequency.
 
 			trace_printf("\nThe Signal Parameters are as follow:\n");
-			trace_printf("  Signal Frequency: %f Hz\n \n",freq);	// Print calculated frequency and period.
+			trace_printf("  Signal Frequency: %u Hz\n \n",freq);	// Print calculated frequency and period.
 
 			//trace_printf("\n writing Frequency\n");
 			write_Freq(freq);
