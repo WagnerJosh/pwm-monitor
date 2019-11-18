@@ -17,6 +17,7 @@
 
 /******************************************** Includes **************************************************/
 
+
 #include <stdio.h>
 #include "diag/Trace.h"
 #include "cmsis/cmsis_device.h"
@@ -339,7 +340,6 @@ void myDAC_Init(){
 	DAC->CR |= DAC_CR_EN1;
 	trace_printf("\nDAC Initialized\n");
 }
-
 /******************************************** SPI Code **************************************************/
 
 void mySPI_SendData(uint8_t data) {
@@ -431,14 +431,19 @@ void write_Res(float resistance){
 
 //Set the address for where to print on the LCD screen
 void set_Address(uint8_t row, uint8_t column) {
+	trace_printf("\nSetting address...\n");
+
 	uint8_t address = ((row*0x40) | (column+0x80));		//Since row is in 0x40 intervals and in order DDRAM address, DB7 must be 1
 	mySPI_sendControl(address, LCD_command);
+	
+	trace_printf("\nAddress all set\n");
 }
-
+// Clear the screen to be able to take new values.
 void clear_LCD(){
-	// Clear the screen to be able to take new values.
 	trace_printf("\nClearing\n");
+
 	mySPI_sendControl(0x01, LCD_command);			// Clear Display
+
 	trace_printf("\ncleared that display\n");
 }
 
