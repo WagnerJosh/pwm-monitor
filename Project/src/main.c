@@ -11,10 +11,16 @@
 // See "system/include/cmsis/stm32f0xx.h" for register/bit definitions.
 // See "system/src/cmsis/vectors_stm32f0xx.c" for handler declarations.
 // ----------------------------------------------------------------------------
+// Code completed by:
+// 		Joshua Wagner
+//		Sam Kosman
 
 #include <stdio.h>
 #include "diag/Trace.h"
 #include "cmsis/cmsis_device.h"
+#include "stm32f0xx_spi.h"
+#include "stm32f0xx_rcc.h"
+#include "stm32f0xx_gpio.h"
 
 // ----------------------------------------------------------------------------
 //
@@ -40,20 +46,39 @@
 
 #define myTIM2_PRESCALER ((uint16_t)0x0000) 		/* Clock prescaler for TIM2 timer: no prescaling */
 #define myTIM2_PERIOD ((uint32_t)0xFFFFFFFF)	 	/* Maximum possible setting for overflow */
+
 #define myTIM3_PRESCALER ((uint16_t)0x0000)
 #define myTIM3_PERIOD ((uint32_t)0xFFFFFFFF)
 
+#define myTIM14_PRESCALER ((uint16_t)0x12C0) 		/* Clock prescaler for TIM14 timer equals 4800 to delay the counter by 1 ms*/
+#define myTIM14_PERIOD ((uint32_t)0xFFFFFFFF)	 	/* Maximum possible setting for overflow */
+
+#define SPI_Direction_1Line_Tx ((uint16_t)0xC000)
+#define SPI_Mode_Master ((uint16_t)0x0104)
+#define SPI_DataSize_8b ((uint16_t)0x0700)
+#define SPI_CPOL_Low ((uint16_t)0x0000)
+#define SPI_CPHA_1Edge ((uint16_t)0x0000)
+#define SPI_NSS_Soft SPI_CR1_SSM
+#define SPI_FirstBit_MSB ((uint16_t)0x0000)
+
+#define SPI_CR1_SSM ((uint16_t)0x0200)
 
 void myGPIOA_Init(void);
+void myGPIOB_Init(void);
 void myTIM2_Init(void);
+void myTIM3_Init(void);
+void Delay_Init(void);
+void mySPI_Init(void);
 void myEXTI_Init(void);
 void myADC_Init(void);		/* Initialize ADC */
 void myDAC_Init(void);
+void myLCD_Init(void);
 
 /* Your global variables... */
 unsigned int edge = 0; 								// Edge counter
 uint32_t pulse_count = 0;
 uint32_t adc_offset = 0;
+uint32_t LCD_command = 0x00;
 
 float freq = 0.00;
 
@@ -88,10 +113,15 @@ int main(int argc, char* argv[]) {
 	trace_printf("System clock: %u Hz\n", SystemCoreClock);
 
 	myGPIOA_Init();		/* Initialize I/O port PA */
+	myGPIOB_Init();		/* Initialize I/O port PB */
 	myTIM2_Init();		/* Initialize timer TIM2 */
+	myTIM3_Init();		/* Initialize timer TIM3 */
+	Delay_Init();		/* Initialize delay timer */
+	mySPI_Init();		/* Initialize SPI */
 	myEXTI_Init();		/* Initialize EXTI */
 	myADC_Init();		/* Initialize ADC */
 	myDAC_Init();		/* Initialize DAC */
+	myLCD_Init();		/* Initialize EXTI */
 
 	while (1){
 
@@ -102,6 +132,7 @@ int main(int argc, char* argv[]) {
 		DAC->DHR12R1 = input;
 		trace_printf("\nDAC Output buffer: %u\n", DAC->DHR12R1);
 		uint32_t resistance	= input;
+		write_Freq(input);
 
 		/*
 		We will be measuring the analog value into Pin 0 here.
@@ -119,17 +150,58 @@ void myGPIOA_Init(){
 
 	RCC->AHBENR |= RCC_AHBENR_GPIOAEN; 			// Enable clock for GPIOA peripheral. Relevant register: RCC->AHBENR
 
-	// Configure PA0
+	// Configure PA0 for potentiometer
 	GPIOA->MODER &= ~(GPIO_MODER_MODER0);		// Configure PA0 as input. Relevant register: GPIOA->MODER. [00]
 	GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR1); 		// Ensure no pull-up/pull-down for PA1. Relevant register: GPIOA->PUPDR
 
-	// Configure PA1
+	// Configure PA1 for 555
 	GPIOA->MODER &= ~(GPIO_MODER_MODER1); 		// Configure PA1 as input. Relevant register: GPIOA->MODER. [00]
 	GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR0);		// Ensure no pull-up/pull-down for PA0. Relevant register: GPIOA->PUPDR
 
-	// Configure PA4 as an analog mode pin
+	// Configure PA4 as an analog mode pin for opto
 	GPIOA->MODER &= ~(GPIO_MODER_MODER4);		// Configure PA4 as output. Relevant register: GPIOA->MODER. [11]
 	GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR4);		// Ensure no pull-up/pull-down for PA4. Relevant register: GPIOA->PUPDR
+}
+
+void myGPIOB_Init(){
+	// initialize all pins that are associated with the LCD including LCK.
+
+    RCC->AHBENR |= RCC_AHBENR_GPIOBEN; 			// Enable clock for GPIOB peripheral. Relevant register: RCC->AHBENR
+
+    // Configure PB3 as SPI-SCK:M21
+    GPIOB->MODER &= ~(GPIO_MODER_MODER3_1);		// Configure PB3 as alternate function. Relevant register: GPIOB->MODER. [11]
+    GPIOB->PUPDR &= ~(GPIO_PUPDR_PUPDR3); 		// Ensure no pull-up/pull-down for PA1. Relevant register: GPIOB->PUPDR
+
+    // Configure PB5 as SPI-MOSI:M17
+    GPIOB->MODER &= ~(GPIO_MODER_MODER5_1); 		// Configure PB3 as alternate function. Relevant register: GPIOB->MODER. [11]
+    GPIOB->PUPDR &= ~(GPIO_PUPDR_PUPDR5);		// Ensure no pull-up/pull-down for PA0. Relevant register: GPIOB->PUPDR
+
+    // Configure PB4 as LCK:M25
+    GPIOB->MODER &= ~(GPIO_MODER_MODER4_0);		// Configure PA4 as output. Relevant register: GPIOA->MODER. [11]
+    GPIOB->PUPDR &= ~(GPIO_PUPDR_PUPDR4);		// Ensure no pull-up/pull-down for PA4. Relevant register: GPIOA->PUPDR
+
+}
+
+void mySPI_Init(){
+	// call all SPI initialization Functions
+	RCC->APB2ENR |= RCC_APB2ENR_SPI1EN; 		//Enable SPI1 clock
+
+	//Given in class
+	SPI_InitTypeDef SPI_InitStructInfo;
+	SPI_InitTypeDef* SPI_InitStruct = &SPI_InitStructInfo;
+
+    SPI_InitStruct->SPI_Direction = SPI_Direction_1Line_Tx;
+    SPI_InitStruct->SPI_Mode = SPI_Mode_Master;
+    SPI_InitStruct->SPI_DataSize = SPI_DataSize_8b;
+    SPI_InitStruct->SPI_CPOL = SPI_CPOL_Low;
+    SPI_InitStruct->SPI_CPHA = SPI_CPHA_1Edge;
+    SPI_InitStruct->SPI_NSS = SPI_NSS_Soft;
+    SPI_InitStruct->SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_256;	//Biggest pre-scaler
+    SPI_InitStruct->SPI_FirstBit = SPI_FirstBit_MSB;
+    SPI_InitStruct->SPI_CRCPolynomial = 7;
+
+    SPI_Init(SPI1, SPI_InitStruct);
+    SPI_Cmd(SPI1, ENABLE);
 }
 
 void myTIM2_Init(){
@@ -171,12 +243,39 @@ void myTIM3_Init(){
 	TIM3->CR1 |= TIM_CR1_CEN; 				//They added a line to activate timer, not sure if necessary
 }
 
-//create tim3 initialization
-//replicate isr for tim3
-// using tim 3 because it is general purpose like tim2
-// we need to put custom scalers
-	//prescaler and autoreload must be set
+void Delay_Init() {
 
+    RCC->APB1ENR |= RCC_APB1ENR_TIM14EN;			//Enable clock for TIM2 peripheral. Relevant register: RCC->APB1ENR
+
+    /* Configure TIM2: buffer auto-reload, count up, stop on overflow,
+       enable update events, interrupt on overflow only */
+
+    TIM14->CR1 = ((uint16_t)0x008C); 			// Relevant register: TIM2->CR1
+    TIM14->PSC = myTIM14_PRESCALER; 			// Set clock prescaler value
+    TIM14->ARR = myTIM14_PERIOD; 					// Set auto-reloaded delay
+    TIM14->EGR = ((uint16_t)0x0001); 			// Update timer registers.  Relevant register: TIM2->EGR
+
+    //MAYBE CHANGE PRIORITY
+    NVIC_SetPriority(TIM14_IRQn, 0); 			// Relevant register: NVIC->IP[3], or use NVIC_SetPriority. Assign TIM2 interrupt priority = 0 in NVIC.
+    NVIC_EnableIRQ(TIM14_IRQn); 					// Enable TIM2 interrupts in NVIC. Relevant register: NVIC->ISER[0], or use NVIC_EnableIRQ.
+
+    TIM14->DIER |= TIM_DIER_UIE; 				// Enable update interrupt generation  Relevant register: TIM14->DIER.
+
+    //They added a line to activate timer, not sure if necessary
+}
+
+void myLCD_Init(){
+// Initialize  LCD. need to change to 4bit Mode
+	mySPI_sendControl(0x2,LCD_command ); // set to 4-bit mode
+	Delay(1);
+	mySPI_sendControl(0x28, LCD_command);
+	Delay(1);
+	mySPI_sendControl(0x0C, LCD_command);
+	Delay(1);
+	mySPI_sendControl(0x06, LCD_command);
+	Delay(1);
+	clear_LCD();
+}
 void myEXTI_Init(){								// Initializing EXTI
 
 	SYSCFG->EXTICR[0]= SYSCFG_EXTICR1_EXTI1_PA; // Map EXTI1 line to PA1. Relevant register: SYSCFG->EXTICR[0]
@@ -227,7 +326,6 @@ void myDAC_Init(){
 }
 
 
-
 uint32_t freq_generator(uint32_t value) {
 	/*If this function is not operating correctly may want to offset the output range by the diode drop across the
 	 * Optocoupler ~ 0.6V for VBE and 0.6V for VBC and 0.229V from AC
@@ -235,7 +333,103 @@ uint32_t freq_generator(uint32_t value) {
 	return value;
 }
 
+void mySPI_SendData(uint8_t data) {
+	/* Force you LCK signal to 0 */
+	GPIOB->BRR = GPIO_Pin_4;
 
+	/* Wait until SPI1 is ready (TXE = 1 or BSY = 0) */
+	while((SPI1->SR & SPI_SR_TXE) == 0x00 || (SPI1->SR & SPI_SR_BSY) != 0x00);
+
+	/* Assumption: your data holds 8 bits to be sent*/
+	SPI_SendData8(SPI1, data);
+
+	/* Wait until SPI1 is not busy (BSY = 0) */
+	while((SPI1->SR & SPI_SR_BSY) != 0x00);
+
+	/* Force your LCK signal to 1 */
+	GPIOB->BRR = GPIO_Pin_4;
+}
+
+void mySPI_sendControl(uint8_t address, uint8_t type){ //sends LCD control commands including addressing, clearing,
+  uint8_t highhalf = (0xF0 & (address>>4)); // generate highhalf address. Shifted 4 to left
+  uint8_t lowhalf = (0x0F & address); // generate lowhalf address
+
+  mySPI_SendData((0x00 | type | highhalf)); // disable LCD, push type, highhalf,
+  mySPI_SendData((0x80 | type | highhalf)); // enable LCD, push type, highhalf,
+  mySPI_SendData((0x00 | type | highhalf)); // disable LCD, push type, highhalf,
+
+  mySPI_SendData((0x00 | type | lowhalf)); // disable LCD, push type, highhalf,
+  mySPI_SendData((0x80 | type | lowhalf)); // enable LCD, push type, highhalf,
+  mySPI_SendData((0x00 | type | lowhalf)); // disable LCD, push type, highhalf,
+}
+
+void write_Freq(float frequency){ // ( AKA_ write High Part of LCD) takes in frequency and displays it.
+	char disp[7];
+	char freq_buffer[4];
+	uint32_t freq =(uint32_t) frequency;
+
+	itoa(freq,freq_buffer,10);
+	// load eerything into buffer.
+
+	disp[0] =  'F';
+	disp[1] =  ':';
+	disp[2] = freq_buffer[3];
+	disp[3] = freq_buffer[2];
+	disp[4] = freq_buffer[1];
+	disp[5] = freq_buffer[0];
+	disp[6] =  'H';
+	disp[7] =  'z';
+
+	for(int i=0; i<7; i++) {
+		mySPI_sendControl(disp[i], 0x40);
+	}
+
+	//print to lcd.
+}
+
+void write_Res(float resistance){ // ( AKA_ Write Low part of LCD) takes in resistance and displays it.
+	char disp[7];
+	char res_buffer[4];
+	uint32_t res =(uint32_t) resistance;
+
+	itoa(res,res_buffer,10);
+	// load eerything into buffer.
+
+	disp[0] =  'R';
+	disp[1] =  ':';
+	disp[2] = res_buffer[3];
+	disp[3] = res_buffer[2];
+	disp[4] = res_buffer[1];
+	disp[5] = res_buffer[0];
+	disp[6] =  'O';
+	disp[7] =  'h';
+
+	for(int i=0; i<7; i++) {
+		mySPI_SendControl(disp[i], 0x40);
+	}
+
+}
+
+void clear_LCD(){
+	// Clear the screen to be able to take new values.
+  mySPI_sendControl(0x01, LCD_command);			// Clear Display
+}
+
+void Delay(uint32_t time){ // delay the system. .... Time is in milliseconds
+
+	uint16_t clock = time; // calculate number of clock cycles that correspond to ms time.
+
+	TIM14->CNT |= 0x00;    //Clear timer
+	TIM14->ARR = clock;      //Autoload time into timer
+	TIM14->EGR = ((uint16_t)0x0001); // Update timer registers
+	TIM14->CR1 |= TIM_CR1_CEN;      //Enabled counter
+
+	while ((TIM14->SR & TIM_SR_UIF) != 0); //Loop until interrupt flag gets set
+
+	TIM14->SR &= ~(TIM_SR_UIF);				// Clear update interrupt flag.
+	TIM14->CR1 |= TIM_CR1_CEN;		 		// Restart stopped timer.
+
+}
 void TIM2_IRQHandler() {	/* This handler is declared in system/src/cmsis/vectors_stm32f0xx.c */
 
 	if ((TIM2->SR & TIM_SR_UIF) != 0) 	{ 		// Check if update interrupt flag is indeed set
@@ -244,6 +438,7 @@ void TIM2_IRQHandler() {	/* This handler is declared in system/src/cmsis/vectors
 		TIM2->CR1 |= TIM_CR1_CEN;		 		// Restart stopped timer. Relevant register: TIM2->CR1
 	}
 }
+
 //TIMER FOR LCD
 void TIM3_IRQHandler() {	/* This handler is declared in system/src/cmsis/vectors_stm32f0xx.c */
 
@@ -265,12 +460,11 @@ void EXTI0_1_IRQHandler(){
 	if ((EXTI->PR & EXTI_PR_PR1) != 0) {  				// Check if EXTI1 interrupt pending flag is indeed set
 		edge++;											/* if entered interupt and edge was detected. Therefore to keep track edge counter is incremented.
 														If first interrupt thrown, edge = 1 enter first statment. Else its end of signal edge = 2 and enter second statement*/
-		if(edge == 1){									// Check if this is first ege
-
+		if (edge == 1) {									// Check if this is first ege
 			TIM2 ->CNT = (uint32_t) 0x0; 				// CLEAR COUNT REGISTER
 			TIM2->CR1 |= TIM_CR1_CEN;					// START THE TIMER
 
-		}else{											// Else (this is the second edge):
+		} else {											// Else (this is the second edge):
 
 			TIM2->CR1 &= ~TIM_CR1_CEN;					//	- Stop timer (TIM2->CR1).
 			pulse_count = TIM2 -> CNT;					//	- Read out count register (TIM2->CNT).
@@ -286,11 +480,11 @@ void EXTI0_1_IRQHandler(){
 
 			edge = 0;
 		}
-			EXTI->PR |= EXTI_PR_PR1;				  	// Clear EXTI1 interrupt pending flag (EXTI->PR).
-			EXTI->IMR |= EXTI_IMR_MR1; 					// Unmask EXTI1 Flag
+
+		EXTI->PR |= EXTI_PR_PR1;				  	// Clear EXTI1 interrupt pending flag (EXTI->PR).
+		EXTI->IMR |= EXTI_IMR_MR1; 					// Unmask EXTI1 Flag
 	}
 }
-
 
 #pragma GCC diagnostic pop
 
