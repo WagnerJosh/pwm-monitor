@@ -47,11 +47,11 @@
 #define myTIM2_PRESCALER ((uint16_t)0x0000) 		/* Clock prescaler for TIM2 timer: no prescaling */
 #define myTIM2_PERIOD ((uint32_t)0xFFFFFFFF)	 	/* Maximum possible setting for overflow */
 
-#define myTIM3_PRESCALER ((uint16_t)0x0000)
-#define myTIM3_PERIOD ((uint32_t)0xFFFFFFFF)
+#define myTIM3_PRESCALER ((uint16_t)0x12C0)
+//#define myTIM3_PERIOD ((uint32_t)0xFFFFFFFF)
 
-#define myTIM14_PRESCALER ((uint16_t)0x12C0) 		/* Clock prescaler for TIM14 timer equals 4800 to delay the counter by 1 ms*/
-#define myTIM14_PERIOD ((uint32_t)0xFFFFFFFF)	 	/* Maximum possible setting for overflow */
+//#define myTIM14_PRESCALER ((uint16_t)0x12C0) 		/* Clock prescaler for TIM14 timer equals 4800 to delay the counter by 1 ms*/
+//#define myTIM14_PERIOD ((uint32_t)0xFFFFFFFF)	 	/* Maximum possible setting for overflow */
 
 #define SPI_Direction_1Line_Tx ((uint16_t)0xC000)
 #define SPI_Mode_Master ((uint16_t)0x0104)
@@ -67,7 +67,7 @@ void myGPIOA_Init(void);
 void myGPIOB_Init(void);
 void myTIM2_Init(void);
 void myTIM3_Init(void);
-void Delay_Init(void);
+//void Delay_Init(void);
 void mySPI_Init(void);
 void myEXTI_Init(void);
 void myADC_Init(void);		/* Initialize ADC */
@@ -116,23 +116,22 @@ int main(int argc, char* argv[]) {
 	myGPIOB_Init();		/* Initialize I/O port PB */
 	myTIM2_Init();		/* Initialize timer TIM2 */
 	myTIM3_Init();		/* Initialize timer TIM3 */
-	Delay_Init();		/* Initialize delay timer */
+//	Delay_Init();		/* Initialize delay timer */
 	mySPI_Init();		/* Initialize SPI */
-	myEXTI_Init();		/* Initialize EXTI */
 	myADC_Init();		/* Initialize ADC */
 	myDAC_Init();		/* Initialize DAC */
-	myLCD_Init();		/* Initialize EXTI */
+	myLCD_Init();		/* Initialize LCD */
+	myEXTI_Init();		/* Initialize EXTI */
+
+	uint32_t input = ADC_pot();
+	trace_printf("\nADC Value: %u\n", input);
+
+	/* Store DAC Value in Output buffer */
+	DAC->DHR12R1 = input;
+	trace_printf("\nDAC Output buffer: %u\n", DAC->DHR12R1);
+	uint32_t resistance	= input;
 
 	while (1){
-
-		uint32_t input = ADC_pot();
-		trace_printf("\nADC Value: %u\n", input);
-
-		/* Store DAC Value in Output buffer */
-		DAC->DHR12R1 = input;
-		trace_printf("\nDAC Output buffer: %u\n", DAC->DHR12R1);
-		uint32_t resistance	= input;
-		write_Freq(input);
 
 		/*
 		We will be measuring the analog value into Pin 0 here.
@@ -147,7 +146,7 @@ int main(int argc, char* argv[]) {
 }
 
 void myGPIOA_Init(){
-
+	trace_printf("\nGPIOA Initializing\n");
 	RCC->AHBENR |= RCC_AHBENR_GPIOAEN; 			// Enable clock for GPIOA peripheral. Relevant register: RCC->AHBENR
 
 	// Configure PA0 for potentiometer
@@ -161,11 +160,12 @@ void myGPIOA_Init(){
 	// Configure PA4 as an analog mode pin for opto
 	GPIOA->MODER &= ~(GPIO_MODER_MODER4);		// Configure PA4 as output. Relevant register: GPIOA->MODER. [11]
 	GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR4);		// Ensure no pull-up/pull-down for PA4. Relevant register: GPIOA->PUPDR
+	trace_printf("\nGPIOA Initialized\n");
 }
 
 void myGPIOB_Init(){
 	// initialize all pins that are associated with the LCD including LCK.
-
+	trace_printf("\nGPIOB Initializing\n");
     RCC->AHBENR |= RCC_AHBENR_GPIOBEN; 			// Enable clock for GPIOB peripheral. Relevant register: RCC->AHBENR
 
     // Configure PB3 as SPI-SCK:M21
@@ -179,11 +179,12 @@ void myGPIOB_Init(){
     // Configure PB4 as LCK:M25
     GPIOB->MODER &= ~(GPIO_MODER_MODER4_0);		// Configure PA4 as output. Relevant register: GPIOA->MODER. [11]
     GPIOB->PUPDR &= ~(GPIO_PUPDR_PUPDR4);		// Ensure no pull-up/pull-down for PA4. Relevant register: GPIOA->PUPDR
-
+    trace_printf("\nGPIOB Initialized\n");
 }
 
 void mySPI_Init(){
 	// call all SPI initialization Functions
+	trace_printf("\nSPI Initializing\n");
 	RCC->APB2ENR |= RCC_APB2ENR_SPI1EN; 		//Enable SPI1 clock
 
 	//Given in class
@@ -202,10 +203,11 @@ void mySPI_Init(){
 
     SPI_Init(SPI1, SPI_InitStruct);
     SPI_Cmd(SPI1, ENABLE);
+    trace_printf("\nSPI Initialized\n");
 }
 
 void myTIM2_Init(){
-
+	trace_printf("\nTIM 2 Initializing\n");
 	RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;			//Enable clock for TIM2 peripheral. Relevant register: RCC->APB1ENR
 
 	/* Configure TIM2: buffer auto-reload, count up, stop on overflow,
@@ -220,36 +222,38 @@ void myTIM2_Init(){
 	NVIC_EnableIRQ(TIM2_IRQn); 					// Enable TIM2 interrupts in NVIC. Relevant register: NVIC->ISER[0], or use NVIC_EnableIRQ.
 
 	TIM2->DIER |= TIM_DIER_UIE; 				// Enable update interrupt generation  Relevant register: TIM2->DIER.
+	trace_printf("\nTIM 2 Initialized\n");
 }
 
 //NEED TO ADJUST VALUES
 void myTIM3_Init(){
 
+	trace_printf("\nTIM 3 Initializing\n");
 	RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;			//Enable clock for TIM2 peripheral. Relevant register: RCC->APB1ENR
 
 	/* Configure TIM2: buffer auto-reload, count up, stop on overflow,
 	   enable update events, interrupt on overflow only */
 
-	TIM3->CR1 = ((uint16_t)0x008C); 			// Relevant register: TIM2->CR1
+	TIM3->CR1 = ((uint16_t)0x10); 				// Relevant register: TIM2->CR1
 	TIM3->PSC = myTIM3_PRESCALER; 				// Set clock prescaler value
-	TIM3->ARR = myTIM3_PERIOD; 					// Set auto-reloaded delay
-	TIM3->EGR = ((uint16_t)0x0001); 			// Update timer registers.  Relevant register: TIM2->EGR
-
+//	TIM3->ARR = myTIM3_PERIOD; 					// Set auto-reloaded delay
+//	TIM3->EGR = ((uint16_t)0x0001); 			// Update timer registers.  Relevant register: TIM2->EGR
+/*
 	NVIC_SetPriority(TIM3_IRQn, 0); 			// Relevant register: NVIC->IP[3], or use NVIC_SetPriority. Assign TIM2 interrupt priority = 0 in NVIC.
 	NVIC_EnableIRQ(TIM3_IRQn); 					// Enable TIM2 interrupts in NVIC. Relevant register: NVIC->ISER[0], or use NVIC_EnableIRQ.
 
 	TIM3->DIER |= TIM_DIER_UIE; 				// Enable update interrupt generation  Relevant register: TIM2->DIER.
 
-	TIM3->CR1 |= TIM_CR1_CEN; 				//They added a line to activate timer, not sure if necessary
+	TIM3->CR1 |= TIM_CR1_CEN; 		*/		//They added a line to activate timer, not sure if necessary
+	trace_printf("\nTIM 3 Initialized\n");
 }
 
 void Delay_Init() {
-
-    RCC->APB1ENR |= RCC_APB1ENR_TIM14EN;			//Enable clock for TIM2 peripheral. Relevant register: RCC->APB1ENR
+	trace_printf("\nTIM 14 / Delay Initializing\n");
 
     /* Configure TIM2: buffer auto-reload, count up, stop on overflow,
        enable update events, interrupt on overflow only */
-
+	/*
     TIM14->CR1 = ((uint16_t)0x008C); 			// Relevant register: TIM2->CR1
     TIM14->PSC = myTIM14_PRESCALER; 			// Set clock prescaler value
     TIM14->ARR = myTIM14_PERIOD; 					// Set auto-reloaded delay
@@ -260,33 +264,61 @@ void Delay_Init() {
     NVIC_EnableIRQ(TIM14_IRQn); 					// Enable TIM2 interrupts in NVIC. Relevant register: NVIC->ISER[0], or use NVIC_EnableIRQ.
 
     TIM14->DIER |= TIM_DIER_UIE; 				// Enable update interrupt generation  Relevant register: TIM14->DIER.
-
+	*/
+    trace_printf("\nTIM 14 / Delay Initialized\n");
     //They added a line to activate timer, not sure if necessary
 }
 
 void myLCD_Init(){
 // Initialize  LCD. need to change to 4bit Mode
+	trace_printf("\nLCD Initializing\n");
+
+	mySPI_SendData(0x03);
+	mySPI_SendData(0x83);
+	mySPI_SendData(0x03);
+
+	Delay(1);
+
+	mySPI_SendData(0x03);
+	mySPI_SendData(0x83);
+	mySPI_SendData(0x03);
+
+	Delay(1);
+
+	mySPI_SendData(0x03);
+	mySPI_SendData(0x83);
+	mySPI_SendData(0x03);
+
+	mySPI_SendData(0x02);
+	mySPI_SendData(0x82);
+	mySPI_SendData(0x02);
+
+
+
 	mySPI_sendControl(0x2,LCD_command ); // set to 4-bit mode
-	Delay(1);
+	//Delay(1);
 	mySPI_sendControl(0x28, LCD_command);
-	Delay(1);
 	mySPI_sendControl(0x0C, LCD_command);
-	Delay(1);
 	mySPI_sendControl(0x06, LCD_command);
-	Delay(1);
-	clear_LCD();
+	mySPI_sendControl(0x01, LCD_command);
+
+	//clear_LCD();
+	//Delay(1);
+	trace_printf("\nLCD Initialized\n");
 }
 void myEXTI_Init(){								// Initializing EXTI
-
+	trace_printf("\nEXTI 1 Initializing\n");
 	SYSCFG->EXTICR[0]= SYSCFG_EXTICR1_EXTI1_PA; // Map EXTI1 line to PA1. Relevant register: SYSCFG->EXTICR[0]
 	EXTI->RTSR |= EXTI_RTSR_TR1; 				// EXTI1 line interrupts: set rising-edge trigger.Relevant register: EXTI->RTSR
 	EXTI->IMR |= EXTI_IMR_MR1; 					// Unmask interrupts from EXTI1 line. Relevant register: EXTI->IMR. unmasked so it is not ignored.
 
 	NVIC_SetPriority(EXTI0_1_IRQn , 0); 		// Assign EXTI1 interrupt priority = 0 in NVIC. Relevant register: NVIC->IP[1], or use NVIC_SetPriority
 	NVIC_EnableIRQ(EXTI0_1_IRQn) ; 				// Enable EXTI1 interrupts in NVIC. Relevant register: NVIC->ISER[0], or use NVIC_EnableIRQ
+	trace_printf("\nEXTI 1 Initialized\n");
 }
 
 void myADC_Init(){		// 12-bit -> stored in a left aligned or right aligned 16-bit data register. can set thresholds Upper and lower.
+	trace_printf("\nADC Initializing\n");
 	trace_printf("\nADC knock knock\n");
 	//Enable ADC RCC
 	RCC->APB2ENR |= RCC_APB2ENR_ADCEN;				//Enable clock for ADC peripheral. Relevant register: RCC->APB2ENR
@@ -312,10 +344,12 @@ void myADC_Init(){		// 12-bit -> stored in a left aligned or right aligned 16-bi
 	trace_printf("\nADC TEEEHEE\n");
 	while(ADC_ISR_ADRDY == 0);						// True when not ready for conversion
 	trace_printf("\nADC IS IN DA HOUSE\n");
+	trace_printf("\nADC Initialized\n");
 }
 
 void myDAC_Init(){
 	// Enable clock
+	trace_printf("\nDAC Initializing\n");
 	RCC->APB1ENR |= RCC_APB1ENR_DACEN;			//Enable clock for DAC peripheral. Relevant register: RCC->APB1ENR
 
 	// Enable Output buffer
@@ -323,18 +357,12 @@ void myDAC_Init(){
 
 	// Enable DAC
 	DAC->CR |= DAC_CR_EN1;
-}
-
-
-uint32_t freq_generator(uint32_t value) {
-	/*If this function is not operating correctly may want to offset the output range by the diode drop across the
-	 * Optocoupler ~ 0.6V for VBE and 0.6V for VBC and 0.229V from AC
-	 */
-	return value;
+	trace_printf("\nDAC Initialized\n");
 }
 
 void mySPI_SendData(uint8_t data) {
 	/* Force you LCK signal to 0 */
+	trace_printf("\nSending DATA ..... \n");
 	GPIOB->BRR = GPIO_Pin_4;
 
 	/* Wait until SPI1 is ready (TXE = 1 or BSY = 0) */
@@ -348,9 +376,11 @@ void mySPI_SendData(uint8_t data) {
 
 	/* Force your LCK signal to 1 */
 	GPIOB->BRR = GPIO_Pin_4;
+	trace_printf("\nSend DATA Success.\n");
 }
 
 void mySPI_sendControl(uint8_t address, uint8_t type){ //sends LCD control commands including addressing, clearing,
+	trace_printf("\nSend Control start \n");
   uint8_t highhalf = (0xF0 & (address>>4)); // generate highhalf address. Shifted 4 to left
   uint8_t lowhalf = (0x0F & address); // generate lowhalf address
 
@@ -361,9 +391,11 @@ void mySPI_sendControl(uint8_t address, uint8_t type){ //sends LCD control comma
   mySPI_SendData((0x00 | type | lowhalf)); // disable LCD, push type, highhalf,
   mySPI_SendData((0x80 | type | lowhalf)); // enable LCD, push type, highhalf,
   mySPI_SendData((0x00 | type | lowhalf)); // disable LCD, push type, highhalf,
+  trace_printf("\nThe send has been Controlled.\n");
 }
 
 void write_Freq(float frequency){ // ( AKA_ write High Part of LCD) takes in frequency and displays it.
+	trace_printf("\nWriting on the Frequency\n");
 	char disp[7];
 	char freq_buffer[4];
 	uint32_t freq =(uint32_t) frequency;
@@ -383,11 +415,12 @@ void write_Freq(float frequency){ // ( AKA_ write High Part of LCD) takes in fre
 	for(int i=0; i<7; i++) {
 		mySPI_sendControl(disp[i], 0x40);
 	}
-
+	trace_printf("\n Freq written\n");
 	//print to lcd.
 }
 
 void write_Res(float resistance){ // ( AKA_ Write Low part of LCD) takes in resistance and displays it.
+	trace_printf("\nWriting on the Resistance\n");
 	char disp[7];
 	char res_buffer[4];
 	uint32_t res =(uint32_t) resistance;
@@ -405,53 +438,56 @@ void write_Res(float resistance){ // ( AKA_ Write Low part of LCD) takes in resi
 	disp[7] =  'h';
 
 	for(int i=0; i<7; i++) {
-		mySPI_SendControl(disp[i], 0x40);
+		mySPI_sendControl(disp[i], 0x40);
 	}
-
+	trace_printf("\n viva la reistance\n");
 }
 
 void clear_LCD(){
 	// Clear the screen to be able to take new values.
+	trace_printf("\nClearing\n");
   mySPI_sendControl(0x01, LCD_command);			// Clear Display
+  trace_printf("\ncleared that display\n");
 }
 
-void Delay(uint32_t time){ // delay the system. .... Time is in milliseconds
+void Delay(uint16_t time){ // delay the system. .... Time is in milliseconds
+	trace_printf("\nI'm just stalling. aka Delaying\n");
 
-	uint16_t clock = time; // calculate number of clock cycles that correspond to ms time.
+	uint16_t clock = time; 				// calculate number of clock cycles that correspond to ms time.
 
-	TIM14->CNT |= 0x00;    //Clear timer
-	TIM14->ARR = clock;      //Autoload time into timer
-	TIM14->EGR = ((uint16_t)0x0001); // Update timer registers
-	TIM14->CR1 |= TIM_CR1_CEN;      //Enabled counter
+	TIM3->CNT = time;    				//Set time into counter
+	TIM3->CR1 |= TIM_CR1_CEN;     		//Enabled counter
 
-	while ((TIM14->SR & TIM_SR_UIF) != 0); //Loop until interrupt flag gets set
+	while ((TIM3->CNT & 0xffff) != 0); 	//Loop until counter becomes empty
 
-	TIM14->SR &= ~(TIM_SR_UIF);				// Clear update interrupt flag.
-	TIM14->CR1 |= TIM_CR1_CEN;		 		// Restart stopped timer.
-
+	TIM3->CR1 &= ~TIM_CR1_CEN;		 	// Restart stopped timer.
+	trace_printf("\nYou have been delayed. You are free to go\n");
 }
+
 void TIM2_IRQHandler() {	/* This handler is declared in system/src/cmsis/vectors_stm32f0xx.c */
-
+	trace_printf("\n Tim 2 is Interrupting you\n");
 	if ((TIM2->SR & TIM_SR_UIF) != 0) 	{ 		// Check if update interrupt flag is indeed set
 		trace_printf("\n*** Overflow! ***\n");
 		TIM2->SR &= ~(TIM_SR_UIF);				// Clear update interrupt flag. Relevant register: TIM2->SR. UIF : Update Interrupt flag
 		TIM2->CR1 |= TIM_CR1_CEN;		 		// Restart stopped timer. Relevant register: TIM2->CR1
 	}
+	trace_printf("\nScrew you Tim 2\n");
 }
 
 //TIMER FOR LCD
-void TIM3_IRQHandler() {	/* This handler is declared in system/src/cmsis/vectors_stm32f0xx.c */
-
-	if ((TIM3->SR & TIM_SR_UIF) != 0) 	{ 		// Check if update interrupt flag is indeed set
-		trace_printf("\n*** Overflow! ***\n");
-		TIM3->SR &= ~(TIM_SR_UIF);				// Clear update interrupt flag. Relevant register: TIM3->SR. UIF : Update Interrupt flag
-		TIM3->CR1 |= TIM_CR1_CEN;		 		// Restart stopped timer. Relevant register: TIM3->CR1
-	}
-}
+//void TIM3_IRQHandler() {	/* This handler is declared in system/src/cmsis/vectors_stm32f0xx.c */
+//	trace_printf("\n Tim 3 is Interrupting you\n");
+//	if ((TIM3->SR & TIM_SR_UIF) != 0) 	{ 		// Check if update interrupt flag is indeed set
+//		trace_printf("\n*** Overflow! ***\n");
+//		TIM3->SR &= ~(TIM_SR_UIF);				// Clear update interrupt flag. Relevant register: TIM3->SR. UIF : Update Interrupt flag
+//		TIM3->CR1 |= TIM_CR1_CEN;		 		// Restart stopped timer. Relevant register: TIM3->CR1
+//	}
+//	trace_printf("\nScrew you Tim 3\n");
+//}
 
 /* This handler is declared in system/src/cmsis/vectors_stm32f0xx.c */
 void EXTI0_1_IRQHandler(){
-
+	trace_printf("\n EXTI 1 is Interrupting you\n");
 	EXTI->IMR &= ~EXTI_IMR_MR1; 							// Mask EXTI1 interrupt
 	/* Your local variables...  */
 	freq = 0.00;
@@ -477,13 +513,15 @@ void EXTI0_1_IRQHandler(){
 
 			trace_printf("\nThe Signal Parameters are as follow:\n");
 			trace_printf("  Signal Frequency: %f Hz\n  Signal Period:    %f sec/cycle\n",freq,period);	// Print calculated frequency and period.
-
+			//write_Freq(freq);
+			//write_Res(freq);
 			edge = 0;
 		}
 
 		EXTI->PR |= EXTI_PR_PR1;				  	// Clear EXTI1 interrupt pending flag (EXTI->PR).
 		EXTI->IMR |= EXTI_IMR_MR1; 					// Unmask EXTI1 Flag
 	}
+	trace_printf("\n Not Today EXTI 1\n");
 }
 
 #pragma GCC diagnostic pop
