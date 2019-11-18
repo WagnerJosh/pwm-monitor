@@ -13,12 +13,10 @@
 // Code written by:
 // 		Joshua Wagner
 //		Sam Kosman
-//
-
 /******************************************** Includes **************************************************/
 
-
 #include <stdio.h>
+#include <stdlib.h>
 #include "diag/Trace.h"
 #include "cmsis/cmsis_device.h"
 #include "stm32f0xx_spi.h"
@@ -36,9 +34,9 @@
 // (currently OS_USE_TRACE_ITM, OS_USE_TRACE_SEMIHOSTING_DEBUG/_STDOUT).
 //
 
-/******************************************** Pragmas **************************************************/
+/******************************************** Pragma's **************************************************/
 
-// Sample pragmas to cope with warnings. Please note the related line at
+// Sample pragma's to cope with warnings. Please note the related line at
 // the end of this function, used to pop the compiler diagnostics status.
 
 #pragma GCC diagnostic push
@@ -52,10 +50,6 @@
 #define myTIM2_PERIOD ((uint32_t)0xFFFFFFFF)	 	/* Maximum possible setting for overflow */
 
 #define myTIM3_PRESCALER ((uint16_t)0x40)
-//#define myTIM3_PERIOD ((uint32_t)0xFFFFFFFF)
-
-//#define myTIM14_PRESCALER ((uint16_t)0x12C0) 		/* Clock prescaler for TIM14 timer equals 4800 to delay the counter by 1 ms*/
-//#define myTIM14_PERIOD ((uint32_t)0xFFFFFFFF)	 	/* Maximum possible setting for overflow */
 
 #define SPI_Direction_1Line_Tx ((uint16_t)0xC000)
 #define SPI_Mode_Master ((uint16_t)0x0104)
@@ -78,39 +72,22 @@ void myADC_Init(void);
 void myDAC_Init(void);
 void myLCD_Init(void);
 
+/******************************************** Functions (MIGHT NOT BE NEEDED) **************************************************/
+uint32_t ADC_pot();
+void mySPI_SendData(uint8_t data);
+void mySPI_sendControl(uint8_t address, uint8_t type);
+void write_Freq(float frequency);
+void write_Res(float resistance);
+void set_Address(uint8_t row, uint8_t column);
+void Delay(uint32_t time);
+
 /******************************************** Global Variables **************************************************/
 
 unsigned int edge = 0; 								// Edge counter
 uint32_t pulse_count = 0;
 uint32_t adc_offset = 0;
-uint32_t LCD_command = 0x00;
-
-float freq = 0.00;
-
-//uint32_t ADC_MAX_Value = ;  						//ADC supply requirements: 2.4 V to 3.6 V
-//uint32_t ADC_resolution = 4096 ;
-
-//uint32_t DAC_MAX_Value = ;
-//uint32_t DAC_resolution = ;
-/******************************************** ADC Potentiometer Code **************************************************/
-
-uint32_t ADC_pot(){
-	//drink up bitches and start conversion
-	ADC1->CR |= ADC_CR_ADSTART;
-	trace_printf("Conversion Therapy...\n");
-	//wait for end of conversion
-	while(!(ADC1->ISR & ADC_ISR_EOC));
-	trace_printf("... Complete!\n");
-	//reset flag
-	ADC1->ISR &= ~(ADC_ISR_EOC);
-
-	//push value
-	uint32_t potential = ((ADC1->DR)& ADC_DR_DATA) - adc_offset;
-	trace_printf("\nADC_DR_DATA value: %u\n",ADC_DR_DATA);
-	trace_printf("\nOffset: %u\n", adc_offset);
-	return potential;
-	// CONVERSION COMPLETE WELCOME JESUS YOU HAVE UNLOCKED YOUR POTENTIAL
-}
+uint8_t LCD_command = 0x00;
+uint8_t LCD_char = 0x40;
 
 /******************************************** Main Code **************************************************/
 
@@ -127,42 +104,47 @@ int main(int argc, char* argv[]) {
 	myADC_Init();		/* Initialize ADC */
 	myDAC_Init();		/* Initialize DAC */
 	myLCD_Init();		/* Initialize LCD */
-	myEXTI_Init();		/* Initialize EXTI */
 
-	uint32_t input = ADC_pot();
-	trace_printf("\nADC Value: %u\n", input);
+	set_Address(0, 0);
+	mySPI_sendControl('F', LCD_char);
+	mySPI_sendControl(':', LCD_char);
+	set_Address(0, 6);
+	mySPI_sendControl('H', LCD_char);
+	mySPI_sendControl('z', LCD_char);
 
-	/* Store DAC Value in Output buffer */
-	DAC->DHR12R1 = input;
-	trace_printf("\nDAC Output buffer: %u\n", DAC->DHR12R1);
-	uint32_t resistance	= input;
+	set_Address(1, 0);
+	mySPI_sendControl('R', LCD_char);
+	mySPI_sendControl(':', LCD_char);
+
+	set_Address(1, 6);
+	mySPI_sendControl('O', LCD_char);
+	mySPI_sendControl('h', LCD_char);
+
+	trace_printf("\nShould be displayed\n");
+
+	write_Res(1234);
+
+	myEXTI_Init();		/* Initialize EXTI, this also includes starting the ADC and DAC. */
 
 	while (1){
-
-		/*
-		We will be measuring the analog value into Pin 0 here.
-		We could technically do this as a function and just call it here.
-		Call ADC function return value
-		Call DAC Function with ADC value Push to Opto.
-		Calculate resistance
-		push to LCD.
-		 */
+		// nothing going on here ...
 	}
 	return 0;
 }
 /******************************************** Initialization Code **************************************************/
 
+// Checked
 void myGPIOA_Init(){
 	trace_printf("\nGPIOA Initializing\n");
 	RCC->AHBENR |= RCC_AHBENR_GPIOAEN; 			// Enable clock for GPIOA peripheral. Relevant register: RCC->AHBENR
 
 	// Configure PA0 for potentiometer
 	GPIOA->MODER &= ~(GPIO_MODER_MODER0);		// Configure PA0 as input. Relevant register: GPIOA->MODER. [00]
-	GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR1); 		// Ensure no pull-up/pull-down for PA1. Relevant register: GPIOA->PUPDR
+	GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR0); 		// Ensure no pull-up/pull-down for PA1. Relevant register: GPIOA->PUPDR
 
 	// Configure PA1 for 555
 	GPIOA->MODER &= ~(GPIO_MODER_MODER1); 		// Configure PA1 as input. Relevant register: GPIOA->MODER. [00]
-	GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR0);		// Ensure no pull-up/pull-down for PA0. Relevant register: GPIOA->PUPDR
+	GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR1);		// Ensure no pull-up/pull-down for PA0. Relevant register: GPIOA->PUPDR
 
 	// Configure PA4 as an analog mode pin for opto
 	GPIOA->MODER &= ~(GPIO_MODER_MODER4);		// Configure PA4 as output. Relevant register: GPIOA->MODER. [11]
@@ -170,27 +152,74 @@ void myGPIOA_Init(){
 	trace_printf("\nGPIOA Initialized\n");
 }
 
+// Checked
 // initialize all pins that are associated with the LCD including LCK.
 void myGPIOB_Init(){
 	trace_printf("\nGPIOB Initializing\n");
 
 	RCC->AHBENR |= RCC_AHBENR_GPIOBEN; 			// Enable clock for GPIOB peripheral. Relevant register: RCC->AHBENR
+	GPIOB->AFR[0] = 0x00;						// Clearing AF(Alternate Functions) register
 
 	// Configure PB3 as SPI-SCK:M21
-	GPIOB->MODER &= ~(GPIO_MODER_MODER3_1);		// Configure PB3 as alternate function. Relevant register: GPIOB->MODER. [11]
+	GPIOB->MODER |= (GPIO_MODER_MODER3_1);		// Configure PB3 as alternate function. Relevant register: GPIOB->MODER. [11]
 	GPIOB->PUPDR &= ~(GPIO_PUPDR_PUPDR3); 		// Ensure no pull-up/pull-down for PA1. Relevant register: GPIOB->PUPDR
+	GPIOB->OSPEEDR |= GPIO_OSPEEDR_OSPEEDR3;
 
 	// Configure PB5 as SPI-MOSI:M17
-	GPIOB->MODER &= ~(GPIO_MODER_MODER5_1); 	// Configure PB3 as alternate function. Relevant register: GPIOB->MODER. [11]
+	GPIOB->MODER |= (GPIO_MODER_MODER5_1); 	// Configure PB3 as alternate function. Relevant register: GPIOB->MODER. [11]
 	GPIOB->PUPDR &= ~(GPIO_PUPDR_PUPDR5);		// Ensure no pull-up/pull-down for PA0. Relevant register: GPIOB->PUPDR
+	GPIOB->OSPEEDR |= GPIO_OSPEEDR_OSPEEDR5;
 
 	// Configure PB4 as LCK:M25
-	GPIOB->MODER &= ~(GPIO_MODER_MODER4_0);		// Configure PA4 as output. Relevant register: GPIOA->MODER. [11]
+	GPIOB->MODER |= (GPIO_MODER_MODER4_0);		// Configure PA4 as output. Relevant register: GPIOA->MODER. [11]
 	GPIOB->PUPDR &= ~(GPIO_PUPDR_PUPDR4);		// Ensure no pull-up/pull-down for PA4. Relevant register: GPIOA->PUPDR
-
+	GPIOB->OSPEEDR |= GPIO_OSPEEDR_OSPEEDR4;
 	trace_printf("\nGPIOB Initialized\n");
 }
 
+// Checked
+void myADC_Init(){
+	trace_printf("\nADC Initializing\n");
+
+	//Enable ADC RCC
+	RCC->APB2ENR |= RCC_APB2ENR_ADCEN;				//Enable clock for ADC peripheral. Relevant register: RCC->APB2ENR
+
+	ADC1->CR = ADC_CR_ADCAL;					// Enable calibration
+	while(ADC1->CR == ADC_CR_ADCAL);					// Wait for calibration to complete
+	adc_offset = ((ADC1->DR)& ADC_DR_DATA);		// Store calibration factor [6:0] from ADC_DR
+
+
+	//Configure ADC: continuous and overrun
+	ADC1->CFGR1 |= ADC_CFGR1_OVRMOD;				//overrun
+	ADC1->CFGR1 |= ADC_CFGR1_DISCEN;				//continuous
+	ADC1->CFGR1 &= ~ADC_CFGR1_EXTEN;				//Ensure interrupts are disabled
+
+	//Select operating channel (output pin) - ADC_IN0
+	ADC1->CHSELR = ADC_CHSELR_CHSEL0;				//Channel IN0 is selected to be converted
+	ADC1->CR |= ADC_CR_ADEN;						//Enabled ADC
+
+	//trace_printf("\nADC IS IN DA HOUSE\n");
+	while(!(ADC1->ISR &ADC_ISR_ADRDY));						// True when not ready for conversion
+	//trace_printf("\nADC IS IN DA HOUSE\n");
+	trace_printf("\nADC Initialized\n");
+}
+
+// Checked
+// 12-bit -> stored in a left aligned or right aligned 16-bit data register. can set thresholds Upper and lower.
+void myDAC_Init(){
+	// Enable clock
+	trace_printf("\nDAC Initializing\n");
+	RCC->APB1ENR |= RCC_APB1ENR_DACEN;				//Enable clock for DAC peripheral. Relevant register: RCC->APB1ENR
+
+	// Enable Output buffer
+	//DAC->CR |= DAC_CR_BOFF1; //<- not sure if this is needed
+
+	// Enable DAC
+	DAC->CR |= DAC_CR_EN1;
+	trace_printf("\nDAC Initialized\n");
+}
+
+// Checked
 //Initialize SPI by calling all SPI initialization Functions
 void mySPI_Init(){
 	trace_printf("\nSPI Initializing\n");
@@ -199,7 +228,7 @@ void mySPI_Init(){
 
 	//Given in class
 	SPI_InitTypeDef SPI_InitStructInfo;
-	SPI_InitTypeDef* SPI_InitStruct = &SPI_InitStructInfo;
+	SPI_InitTypeDef * SPI_InitStruct = &SPI_InitStructInfo;
 
 	SPI_InitStruct->SPI_Direction = SPI_Direction_1Line_Tx;
 	SPI_InitStruct->SPI_Mode = SPI_Mode_Master;
@@ -211,12 +240,14 @@ void mySPI_Init(){
 	SPI_InitStruct->SPI_FirstBit = SPI_FirstBit_MSB;
 	SPI_InitStruct->SPI_CRCPolynomial = 7;
 
-	SPI_Init(SPI1, SPI_InitStruct);
+	SPI_Init(SPI1, &SPI_InitStructInfo);
 	SPI_Cmd(SPI1, ENABLE);
 
 	trace_printf("\nSPI Initialized\n");
 }
-//Initialize TIM2 clock to be used internal interrupts
+
+// Checked
+//Initialize TIM2 clock to use internal interrupts every second
 void myTIM2_Init(){
 	trace_printf("\nTIM 2 Initializing\n");
 	RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;			//Enable clock for TIM2 peripheral. Relevant register: RCC->APB1ENR
@@ -236,33 +267,34 @@ void myTIM2_Init(){
 	trace_printf("\nTIM 2 Initialized\n");
 }
 
+// Checked
 //Initialize TIM3 clock to be used for Delay function for LCD
 void myTIM3_Init(){
-	trace_printf("\nTIM 3 Initializing\n");
+	//trace_printf("\nTIM 3 Initializing\n");
 
 	RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;			//Enable clock for TIM3 peripheral. Relevant register: RCC->APB1ENR
 
-
-	TIM3->CR1 = ((uint16_t)0x10); 				// Relevant register: TIM3->CR1
+	TIM3->CR1 = 0x10; 				// Relevant register: TIM3->CR1
 	TIM3->PSC = myTIM3_PRESCALER; 				// Set clock prescaler value
 	trace_printf("\nTIM 3 Initialized\n");
 }
 
+// Checked
 // Initialize  LCD. need to change to 4bit Mode
 void myLCD_Init(){
-	trace_printf("\nLCD Initializing\n");
+	//trace_printf("\nLCD Initializing\n");
+	/*
+	mySPI_SendData(0x03);
+	mySPI_SendData(0x83);
+	mySPI_SendData(0x03);
+
+	Delay(6);
 
 	mySPI_SendData(0x03);
 	mySPI_SendData(0x83);
 	mySPI_SendData(0x03);
 
-	Delay(1);
-
-	mySPI_SendData(0x03);
-	mySPI_SendData(0x83);
-	mySPI_SendData(0x03);
-
-	Delay(1);
+	Delay(2);
 
 	mySPI_SendData(0x03);
 	mySPI_SendData(0x83);
@@ -270,24 +302,25 @@ void myLCD_Init(){
 
 	mySPI_SendData(0x02);
 	mySPI_SendData(0x82);
-	mySPI_SendData(0x02);
+	mySPI_SendData(0x02); */
 
-
-
-	mySPI_sendControl(0x2,LCD_command ); // set to 4-bit mode
-	//Delay(1);
+	mySPI_sendControl(0x20, LCD_command); // set to 4-bit mode
+	Delay(1);
 	mySPI_sendControl(0x28, LCD_command);
 	mySPI_sendControl(0x0C, LCD_command);
 	mySPI_sendControl(0x06, LCD_command);
 	mySPI_sendControl(0x01, LCD_command);
 
-	//clear_LCD();
 	//Delay(1);
 	trace_printf("\nLCD Initialized\n");
 }
+
+// checked but minor difference
 void myEXTI_Init(){									// Initializing EXTI
 	trace_printf("\nEXTI 1 Initializing\n");
-	SYSCFG->EXTICR[0]= SYSCFG_EXTICR1_EXTI1_PA; 	// Map EXTI1 line to PA1. Relevant register: SYSCFG->EXTICR[0]
+	// Differences
+	SYSCFG->EXTICR[0] = 0x0000FF0F;
+	//SYSCFG->EXTICR[0] = SYSCFG_EXTICR1_EXTI1_PA; 	// Map EXTI1 line to PA1. Relevant register: SYSCFG->EXTICR[0]
 	EXTI->RTSR |= EXTI_RTSR_TR1; 					// EXTI1 line interrupts: set rising-edge trigger.Relevant register: EXTI->RTSR
 	EXTI->IMR |= EXTI_IMR_MR1; 						// Unmask interrupts from EXTI1 line. Relevant register: EXTI->IMR. unmasked so it is not ignored.
 
@@ -296,118 +329,139 @@ void myEXTI_Init(){									// Initializing EXTI
 	trace_printf("\nEXTI 1 Initialized\n");
 }
 
-// 12-bit -> stored in a left aligned or right aligned 16-bit data register. can set thresholds Upper and lower.
-void myADC_Init(){
-	trace_printf("\nADC Initializing\n");
-	trace_printf("\nADC knock knock\n");
 
-	//Enable ADC RCC
-	RCC->APB2ENR |= RCC_APB2ENR_ADCEN;				//Enable clock for ADC peripheral. Relevant register: RCC->APB2ENR
+/******************************************** ADC and DAC loading Code **************************************************/
+//checked
+uint32_t ADC_pot(){
+	//drink up bitches and start conversion
+	ADC1->DR = 0x00;
+	ADC1->CR |= ADC_CR_ADSTART;
+	//trace_printf("Conversion Therapy...\n");
+	//wait for end of conversion
+	while(!(ADC1->ISR & ADC_ISR_EOC));
+	//trace_printf("... Complete!\n");
+	//reset flag
+	ADC1->ISR &= ~(ADC_ISR_EOC);
 
-	if(ADC_CR_ADEN == 0x00) {						// If calibration is not complete
-		trace_printf("\nADC unlock that door\n");
-		ADC1->CR |= ADC_CR_ADCAL;					// Enable calibration
-		while(ADC_CR_ADCAL == 1);					// Wait for calibration to complete
-		adc_offset = ((ADC1->DR)& ADC_DR_DATA);		// Store calibration factor [6:0] from ADC_DR
-		trace_printf("\nADC SHE UNLOCKED ENTER AT OWN RISK\n");
-	}
+	//push value
+	uint32_t potential = ((ADC1->DR)& ADC_DR_DATA) - adc_offset;
+	//trace_printf("\nADC_DR_DATA value: %u\n",ADC_DR_DATA);
+	//trace_printf("\nPotential: %u\n", potential);
 
-	//Configure ADC: continuous and overrun
-	ADC1->CFGR1 |= ADC_CFGR1_OVRMOD;				//overrun
-	ADC1->CFGR1 |= ADC_CFGR1_CONT;					//continuous
-	//ADC1->CFGR1 |= ADC_CFGR1_RES;					//set resolution (maybe to 12 = [00]) (I think it is already set there?)
-
-	//Select operating channel (output pin) - ADC_IN0
-	ADC1->CHSELR |= ADC_CHSELR_CHSEL0;				//Channel IN0 is selected to be converted
-	ADC1->CR |= ADC_CR_ADEN;						//Enabled ADC
-
-
-	trace_printf("\nADC TEEEHEE\n");				// Waiting for ADC to be ready for conversion
-	while(ADC_ISR_ADRDY == 0);						// True when not ready for conversion
-	trace_printf("\nADC IS IN DA HOUSE\n");
-	trace_printf("\nADC Initialized\n");
+	Delay(10);
+	//trace_printf("\nPotential: %u\n", DAC->DHR12R1);
+	return potential;
+	// CONVERSION COMPLETE WELCOME JESUS YOU HAVE UNLOCKED YOUR POTENTIAL
 }
 
-void myDAC_Init(){
-	// Enable clock
-	trace_printf("\nDAC Initializing\n");
-	RCC->APB1ENR |= RCC_APB1ENR_DACEN;				//Enable clock for DAC peripheral. Relevant register: RCC->APB1ENR
 
-	// Enable Output buffer
-	DAC->CR |= DAC_CR_BOFF1;
-
-	// Enable DAC
-	DAC->CR |= DAC_CR_EN1;
-	trace_printf("\nDAC Initialized\n");
-}
 /******************************************** SPI Code **************************************************/
-
+//checked
 void mySPI_SendData(uint8_t data) {
-	trace_printf("\nSending DATA ..... \n");
+	//trace_printf("\nSending DATA ..... \n");
 
 	GPIOB->BRR = GPIO_Pin_4;					/* Force you LCK signal to 0 */
 
 	/* Wait until SPI1 is ready (TXE = 1 or BSY = 0) */
-	while((SPI1->SR & SPI_SR_TXE) == 0x00 || (SPI1->SR & SPI_SR_BSY) != 0x00);
+	while(((SPI1->SR & SPI_SR_TXE) == 0) & ((SPI1->SR & SPI_SR_BSY) == 1));
 
 	SPI_SendData8(SPI1, data);					/* Assumption: your data holds 8 bits to be sent*/
 
-	while((SPI1->SR & SPI_SR_BSY) != 0x00);		/* Wait until SPI1 is not busy (BSY = 0) */
+	while((SPI1->SR & SPI_SR_BSY) == 1);		/* Wait until SPI1 is not busy (BSY = 0) */
 
+	Delay(1);
 	GPIOB->BRR = GPIO_Pin_4;					/* Force your LCK signal to 1 */
-	trace_printf("\nSend DATA Success.\n");
+	Delay(2);
+	//trace_printf("\nSend DATA Success.\n");
 }
 
-void mySPI_sendControl(uint8_t address, uint8_t type){ //sends LCD control commands including addressing, clearing,
-	trace_printf("\nSend Control start \n");
+//checked
+void mySPI_sendControl(uint8_t location, uint8_t type){ //sends LCD control commands including addressing, clearing,
+	//trace_printf("\nSend Control start \n");
 
-	uint8_t highhalf = (0xF0 & (address>>4)); 	// generate highhalf address. Shifted 4 to left
-	uint8_t lowhalf = (0x0F & address); 		// generate lowhalf address
+	uint8_t lowhalf = (0x0F & location); 		// generate lowhalf address
+	uint8_t highhalf = (0x0F & (location>>4)); 	// generate highhalf address. Shifted 4 to left
 
-	mySPI_SendData((0x00 | type | highhalf)); 	// disable LCD, push type, highhalf,
-	mySPI_SendData((0x80 | type | highhalf)); 	// enable LCD, push type, highhalf,
-	mySPI_SendData((0x00 | type | highhalf)); 	// disable LCD, push type, highhalf,
 
-	mySPI_SendData((0x00 | type | lowhalf)); 	// disable LCD, push type, highhalf,
-	mySPI_SendData((0x80 | type | lowhalf)); 	// enable LCD, push type, highhalf,
-	mySPI_SendData((0x00 | type | lowhalf)); 	// disable LCD, push type, highhalf,
+	mySPI_SendData((type | highhalf)); 	// disable LCD, push type, highhalf,
+	mySPI_SendData(((type | 0x80)| highhalf)); 	// enable LCD, push type, highhalf,
+	mySPI_SendData((type | highhalf)); 	// disable LCD, push type, highhalf,
 
-	trace_printf("\nThe send has been Controlled.\n");
+	mySPI_SendData((type | lowhalf)); 	// disable LCD, push type, highhalf,
+	mySPI_SendData(((type |0x80) | lowhalf)); 	// enable LCD, push type, highhalf,
+	mySPI_SendData((type | lowhalf)); 	// disable LCD, push type, highhalf,
+
+	//trace_printf("\nThe send has been Controlled.\n");
 }
 
 /******************************************** LCD Helper Functions **************************************************/
-
+//checked minor differnce in loading freq
 void write_Freq(float frequency){ // ( AKA_ write High Part of LCD) takes in frequency and displays it.
-	trace_printf("\nWriting on the Frequency\n");
 
-	set_Address(0,0);
-	char disp[7];
+	// ADD STATEMENT FOR FREQ = 0 CASE.
+
+	set_Address(0, 2);
+		char buffer[5];
+		itoa(frequency, buffer, 10);
+		if(frequency < 1000){
+			buffer[3] = ' ';
+		}
+		uint8_t i = 0;
+		while(i < 4){
+			mySPI_sendControl(buffer[i], LCD_char);
+			i++;
+		}
+
+	//trace_printf("\nWriting on the Frequency\n");
+	/*set_Address(0,0);
+	char disp[9];
 	char freq_buffer[4];
-	uint32_t freq =(uint32_t) frequency;
+	uint32_t temp =(uint32_t) frequency;
 
-	itoa(freq,freq_buffer,10);		// convert number to string array
+	itoa(temp,freq_buffer,10);		// convert number to string array
 
 	disp[0] =  'F';					// load everything into buffer.
 	disp[1] =  ':';
-	disp[2] = freq_buffer[3];
-	disp[3] = freq_buffer[2];
-	disp[4] = freq_buffer[1];
-	disp[5] = freq_buffer[0];
+	disp[2] = 	freq_buffer[0];
+	disp[3] = 	freq_buffer[1];
+	disp[4] = 	freq_buffer[2];
+	disp[5] = 	freq_buffer[3];
 	disp[6] =  'H';
 	disp[7] =  'z';
 
-	for(int i=0; i<7; i++) {
+	for(int i=0; i<8; i++) {
+		//trace_printf("\n DISP: %c \n", disp[i]);
 		mySPI_sendControl(disp[i], 0x40);
 	}
-	trace_printf("\n Freq written\n");
+	//trace_printf("\n Freq written\n");*/
 }
 
 // ( AKA_ Write Low part of LCD) takes in resistance and displays it.
-void write_Res(float resistance){
-	trace_printf("\nWriting on the Resistance\n");
+//Checked
+void write_Res(float resistance){ // add statement for res=0 case.
+	//trace_printf("\nWriting on the Resistance\n");
 
-	set_Address(0,1);
-	char disp[7];
+	set_Address(1, 2);
+		char buffer[5];
+		itoa(resistance, buffer, 10);
+		uint8_t i = 0;
+		if(resistance < 1000){
+			buffer[3] = ' ';
+		}
+		if(resistance < 100){
+			buffer[2] = ' ';
+		}
+		if(resistance < 10){
+			buffer[1] = ' ';
+		}
+
+		while(i < 4){
+			mySPI_sendControl(buffer[i], LCD_char);
+			i++;
+		}
+/*
+	set_Address(1,0);
+	char disp[8];
 	char res_buffer[4];
 	uint32_t res =(uint32_t) resistance;
 
@@ -415,102 +469,107 @@ void write_Res(float resistance){
 
 	disp[0] =  'R';				// load everything into buffer.
 	disp[1] =  ':';
-	disp[2] = res_buffer[3];
-	disp[3] = res_buffer[2];
-	disp[4] = res_buffer[1];
-	disp[5] = res_buffer[0];
+	disp[2] = res_buffer[0];
+	disp[3] = res_buffer[1];
+	disp[4] = res_buffer[2];
+	disp[5] = res_buffer[3];
 	disp[6] =  'O';
 	disp[7] =  'h';
 
-	for(int i=0; i<7; i++) {
+	for(int i=0; i<8; i++) {
+		trace_printf("\n RES: %c ", disp[i]);
 		mySPI_sendControl(disp[i], 0x40);
 	}
 
-	trace_printf("\n viva la reistance\n");
+	//trace_printf("\n viva la reistance\n");*/
 }
 
 //Set the address for where to print on the LCD screen
+//checked
 void set_Address(uint8_t row, uint8_t column) {
-	trace_printf("\nSetting address...\n");
+//	trace_printf("\nSetting address...\n");
 
-	uint8_t address = ((row*0x40) | (column+0x80));		//Since row is in 0x40 intervals and in order DDRAM address, DB7 must be 1
+	uint8_t address = ((row*0x40) | (0x80+column));		//Since row is in 0x40 intervals and in order DDRAM address, DB7 must be 1
 	mySPI_sendControl(address, LCD_command);
-	
-	trace_printf("\nAddress all set\n");
-}
-// Clear the screen to be able to take new values.
-void clear_LCD(){
-	trace_printf("\nClearing\n");
 
-	mySPI_sendControl(0x01, LCD_command);			// Clear Display
-
-	trace_printf("\ncleared that display\n");
+	//trace_printf("\nAddress all set\n");
 }
 
-void Delay(uint16_t time){ // delay the system. .... Time is in milliseconds
-	trace_printf("\nI'm just stalling. aka Delaying\n");
+//checked
+void Delay(uint32_t time){ // delay the system. .... Time is in milliseconds
+	//trace_printf("\nI'm just stalling. aka Delaying\n");
 
 	uint16_t clock = time*(750); 					// calculate number of clock cycles that correspond to ms time (12000/16).
 
 	TIM3->CNT = clock;    							//Set clock into counter
 	TIM3->CR1 |= TIM_CR1_CEN;     					//Enabled counter
 
-	while ((TIM3->CNT & 0xffff) != 0); 				//Loop until counter becomes empty
+	while ((TIM3->CNT & 0xFFFF) != 0x00); 				//Loop until counter becomes empty
 
 	TIM3->CR1 &= ~TIM_CR1_CEN;		 				// Restart stopped timer.
 
-	trace_printf("\nYou have been delayed. You are free to go\n");
+	//trace_printf("\nYou have been delayed. You are free to go\n");
 }
 
 /******************************************** Interrupt Handler Code **************************************************/
 
 /* This handler is declared in system/src/cmsis/vectors_stm32f0xx.c */
 void TIM2_IRQHandler() {
-	trace_printf("\n Tim 2 is Interrupting you\n");
+	//trace_printf("\n Tim 2 is Interrupting you\n");
 	if ((TIM2->SR & TIM_SR_UIF) != 0) 	{ 				// Check if update interrupt flag is indeed set
 		trace_printf("\n*** Overflow! ***\n");
 		TIM2->SR &= ~(TIM_SR_UIF);						// Clear update interrupt flag. Relevant register: TIM2->SR. UIF : Update Interrupt flag
 		TIM2->CR1 |= TIM_CR1_CEN;		 				// Restart stopped timer. Relevant register: TIM2->CR1
 	}
-	trace_printf("\nScrew you Tim 2\n");
+	//trace_printf("\nScrew you Tim 2\n");
 }
-
 
 /* This handler is declared in system/src/cmsis/vectors_stm32f0xx.c */
 void EXTI0_1_IRQHandler(){
-	trace_printf("\n EXTI 1 is Interrupting you\n");
+	//trace_printf("\n EXTI 1 is Interrupting you\n");
 	EXTI->IMR &= ~EXTI_IMR_MR1; 						// Mask EXTI1 interrupt
-	/* Your local variables...  */
-	freq = 0.00;
-	float period = 0.00;
+	/* Your local variables... */
+	float freq = 0.00;
+	uint32_t pulse_count = 0.00;
 
 	if ((EXTI->PR & EXTI_PR_PR1) != 0) {  				// Check if EXTI1 interrupt pending flag is indeed set
 		edge++;											/* if entered interupt and edge was detected. Therefore to keep track edge counter is incremented.
 														If first interrupt thrown, edge = 1 enter first statment. Else its end of signal edge = 2 and enter second statement*/
 		if (edge == 1) {									// Check if this is first ege
-			TIM2 ->CNT = (uint32_t) 0x0; 				// CLEAR COUNT REGISTER
-			TIM2->CR1 |= TIM_CR1_CEN;					// START THE TIMER
+			TIM2 ->CNT = (uint32_t) 0x00; 				// CLEAR COUNT REGISTER
+			TIM2 ->CR1 |= TIM_CR1_CEN;					// START THE TIMER
 
 		} else {											// Else (this is the second edge):
-
+			edge = 0;
 			TIM2->CR1 &= ~TIM_CR1_CEN;					//	- Stop timer (TIM2->CR1).
 			pulse_count = TIM2 -> CNT;					//	- Read out count register (TIM2->CNT).
+			trace_printf("  Pulses: %f \n \n",pulse_count);
 			freq = ((float) SystemCoreClock)/pulse_count;	//	- Calculate signal frequency.
-			period = 1/freq;							//	- Calculate signal period.
-
 
 			trace_printf("\nThe Signal Parameters are as follow:\n");
-			trace_printf("  Signal Frequency: %f Hz\n  Signal Period:    %f sec/cycle\n",freq,period);	// Print calculated frequency and period.
-			//write_Freq(freq);
-			//write_Res(freq);
-			edge = 0;
+			trace_printf("  Signal Frequency: %f Hz\n \n",freq);	// Print calculated frequency and period.
+
+			//trace_printf("\n writing Frequency\n");
+			write_Freq(freq);
+			//trace_printf("\n Completed writing Frequency\n");
+
+			//trace_printf("\n writing Resistance\n");
+
+			uint32_t res = ADC_pot();
+			write_Res(res);
+			//trace_printf("\n Completed\n");
+
+
 		}
 
 		EXTI->PR |= EXTI_PR_PR1;				  		// Clear EXTI1 interrupt pending flag (EXTI->PR).
 		EXTI->IMR |= EXTI_IMR_MR1; 						// Unmask EXTI1 Flag
 	}
-	trace_printf("\n Not Today EXTI 1\n");
+	//trace_printf("\n YOU WILL DO AMAZING\n");
 }
+
+
+
 
 #pragma GCC diagnostic pop
 
