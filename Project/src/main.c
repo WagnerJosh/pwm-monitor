@@ -55,6 +55,8 @@ unsigned int edge = 0; 								// Edge counter
 uint32_t pulse_count = 0;
 uint32_t adc_offset = 0;
 
+float freq = 0.00;
+
 //uint32_t ADC_MAX_Value = ;  						//ADC supply requirements: 2.4 V to 3.6 V
 //uint32_t ADC_resolution = 4096 ;
 
@@ -99,6 +101,8 @@ int main(int argc, char* argv[]) {
 		/* Store DAC Value in Output buffer */
 		DAC->DHR12R1 = input;
 		trace_printf("\nDAC Output buffer: %u\n", DAC->DHR12R1);
+		uint32_t resistance	= input;
+
 		/*
 		We will be measuring the analog value into Pin 0 here.
 		We could technically do this as a function and just call it here.
@@ -255,7 +259,7 @@ void EXTI0_1_IRQHandler(){
 
 	EXTI->IMR &= ~EXTI_IMR_MR1; 							// Mask EXTI1 interrupt
 	/* Your local variables...  */
-	float freq = 0.00;
+	freq = 0.00;
 	float period = 0.00;
 
 	if ((EXTI->PR & EXTI_PR_PR1) != 0) {  				// Check if EXTI1 interrupt pending flag is indeed set
