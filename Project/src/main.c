@@ -89,6 +89,7 @@ uint32_t adc_offset = 0;
 uint8_t LCD_command = 0x00;
 uint8_t LCD_char = 0x40;
 uint16_t res =0;
+uint32_t freq = 0;
 
 /******************************************** Main Code **************************************************/
 
@@ -106,10 +107,13 @@ int main(int argc, char* argv[]) {
 	myDAC_Init();		/* Initialize DAC */
 	myLCD_Init();		/* Initialize LCD */
 
+	//Set up initial display
+
 	myEXTI_Init();		/* Initialize EXTI, this also includes starting the ADC and DAC. */
 
 	while (1){
 		// nothing going on here ...
+	;
 	}
 	return 0;
 }
@@ -267,16 +271,16 @@ void myTIM3_Init(){
 void myLCD_Init(){
 	//trace_printf("\nLCD Initializing\n");
 	mySPI_sendControl(0x20, LCD_command); // set to 4-bit mode
-	Delay(2);
+	Delay(10);
 	mySPI_sendControl(0x28, LCD_command);
-	Delay(2);
+	Delay(10);
 	mySPI_sendControl(0x0C, LCD_command);
-	Delay(2);
+	Delay(10);
 	mySPI_sendControl(0x06, LCD_command);
-	Delay(2);
+	Delay(10);
 	mySPI_sendControl(0x01, LCD_command);
+	Delay(10);
 
-	Delay(1);
 	trace_printf("\nLCD Initialized\n");
 }
 
@@ -298,27 +302,22 @@ void myEXTI_Init(){									// Initializing EXTI
 /******************************************** ADC and DAC loading Code **************************************************/
 //checked
 uint32_t ADC_pot(){
-	//drink up bitches and start conversion
+
 	ADC1->DR = 0x00;
+
 	ADC1->CR |= ADC_CR_ADSTART;
-	//trace_printf("Conversion Therapy...\n");
+
 	//wait for end of conversion
-	while(!(ADC1->ISR & ADC_ISR_EOC));
-	//trace_printf("... Complete!\n");
+	while((ADC1->ISR & ADC_ISR_EOC)==0);
+
 	//reset flag
 	ADC1->ISR &= ~(ADC_ISR_EOC);
-
-	//push value
-	//uint32_t potential = ((ADC1->DR)& ADC_DR_DATA) - adc_offset;
-	//trace_printf("\nADC_DR_DATA value: %u\n",ADC_DR_DATA);
-	//trace_printf("\nPotential: %u\n", potential);
-
-
 	DAC->DHR12R1 =( 1350 + (0.666)*ADC1->DR);// potential;
-	//Delay(50);
+	Delay(50);
+
 	//trace_printf("\nPotential: %u\n", DAC->DHR12R1);
 	return (ADC1->DR);
-	// CONVERSION COMPLETE WELCOME JESUS YOU HAVE UNLOCKED YOUR POTENTIAL
+
 }
 
 
@@ -336,9 +335,9 @@ void mySPI_SendData(uint8_t data) {
 
 	while((SPI1->SR & SPI_SR_BSY) == 1);		/* Wait until SPI1 is not busy (BSY = 0) */
 
-	//Delay(1);
+	Delay(1);
 	GPIOB->BSRR = GPIO_Pin_4;					/* Force your LCK signal to 1 */
-	//Delay(2);
+	Delay(2);
 	//trace_printf("\nSend DATA Success.\n");
 }
 
@@ -367,51 +366,54 @@ void write_Freq(uint32_t frequency){ // ( AKA_ write High Part of LCD) takes in 
 	// ADD STATEMENT FOR FREQ = 0 CASE.
 	//trace_printf("\nWriting on the Frequency\n");
 	set_Address(0,0);
-	char disp[9];
-	char freq_buffer[4];
+	char buffer[5];
 	uint32_t temp =(uint32_t) frequency;
+	itoa(temp,buffer,10);		// convert number to string array
 
-	itoa(temp,freq_buffer,10);		// convert number to string array
-
-	disp[0] =  'F';					// load everything into buffer.
-	disp[1] =  ':';
-	disp[2] = 	freq_buffer[0];
-	disp[3] = 	freq_buffer[1];
-	disp[4] = 	freq_buffer[2];
-	disp[5] = 	freq_buffer[3];
-	disp[6] =  'H';
-	disp[7] =  'z';
-
-	for(int i=0; i<8; i++) {
-		//trace_printf("\n DISP: %c \n", disp[i]);
-		mySPI_sendControl(disp[i], 0x40);
+	if(frequency < 1000){
+		buffer[3] = ' ';
 	}
+
+	mySPI_sendControl('F', LCD_char);
+	mySPI_sendControl(':', LCD_char);
+
+	uint8_t i = 0;
+	while(i < 4){
+		mySPI_sendControl(buffer[i], LCD_char);
+		i++;
+	}
+
+	mySPI_sendControl('H', LCD_char);
+	mySPI_sendControl('z', LCD_char);
 
 }
 
 // ( AKA_ Write Low part of LCD) takes in resistance and displays it.
 //Checked
 void write_Res(uint32_t resistance){ // add statement for res=0 case.
-	set_Address(1,0);
-	char disp[8];
-	char res_buffer[4];
-	uint32_t res =(uint32_t) resistance;
-
-	itoa(res,res_buffer,10);	// convert number to string array
-
-	disp[0] =  'R';				// load everything into buffer.
-	disp[1] =  ':';
-	disp[2] = res_buffer[0];
-	disp[3] = res_buffer[1];
-	disp[4] = res_buffer[2];
-	disp[5] = res_buffer[3];
-	disp[6] =  'O';
-	disp[7] =  'h';
-
-	for(int i=0; i<8; i++) {
-		//trace_printf("\n RES: %c ", disp[i]);
-		mySPI_sendControl(disp[i], 0x40);
+	set_Address(1, 0);
+	char buffer[5];
+	itoa(resistance, buffer, 10);
+	if(resistance < 1000){
+		buffer[3] = ' ';
 	}
+	if(resistance < 100){
+		buffer[2] = ' ';
+	}
+	if(resistance < 10){
+		buffer[1] = ' ';
+	}
+	mySPI_sendControl('R', LCD_char);
+	mySPI_sendControl(':', LCD_char);
+
+	uint8_t i = 0;
+
+	while(i < 4){
+		mySPI_sendControl(buffer[i], LCD_char);
+		i++;
+	}
+	mySPI_sendControl(' ', LCD_char);
+	mySPI_sendControl(0xF4, LCD_char);
 
 
 }
@@ -456,9 +458,8 @@ void TIM2_IRQHandler() {
 /* This handler is declared in system/src/cmsis/vectors_stm32f0xx.c */
 void EXTI0_1_IRQHandler(){
 	//trace_printf("\n EXTI 1 is Interrupting you\n");
-	//EXTI->IMR &= ~EXTI_IMR_MR1; 						// Mask EXTI1 interrupt
+	EXTI->IMR &= ~EXTI_IMR_MR1; 						// Mask EXTI1 interrupt
 
-	uint32_t freq = 0;
 	uint32_t pulse_count = 0;
 
 	if ((EXTI->PR & EXTI_PR_PR1) != 0) {  				// Check if EXTI1 interrupt pending flag is indeed set
@@ -477,16 +478,16 @@ void EXTI0_1_IRQHandler(){
 			freq = (SystemCoreClock)/pulse_count;	//	- Calculate signal frequency.
 
 			//trace_printf("\nThe Signal Parameters are as follow:\n");
-			//trace_printf("  Signal Frequency: %u Hz\n \n",freq);	// Print calculated frequency and period.
-
+			trace_printf("  Signal Frequency: %u Hz\n \n",freq);	// Print calculated frequency and period.
 			write_Freq(freq);
+			Delay(5);
 			res = ADC_pot();
 			write_Res(res);
-
+			Delay(5);
 		}
 
-		EXTI->PR ^= 0x20;				  		// Clear EXTI1 interrupt pending flag (EXTI->PR).
-		//EXTI->IMR |= EXTI_IMR_MR1; 						// Unmask EXTI1 Flag
+		EXTI->PR |= EXTI_IMR_MR1;				  		// Clear EXTI1 interrupt pending flag (EXTI->PR).
+		EXTI->IMR |= EXTI_IMR_MR1; 						// Unmask EXTI1 Flag
 	}
 	//trace_printf("\n YOU WILL DO AMAZING\n");
 }
