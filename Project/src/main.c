@@ -51,14 +51,14 @@
 
 #define myTIM3_PRESCALER ((uint16_t)0x40)
 
-#define SPI_Direction_1Line_Tx ((uint16_t)0xC000)
-#define SPI_Mode_Master ((uint16_t)0x0104)
-#define SPI_DataSize_8b ((uint16_t)0x0700)
-#define SPI_CPOL_Low ((uint16_t)0x0000)
-#define SPI_CPHA_1Edge ((uint16_t)0x0000)
-#define SPI_NSS_Soft SPI_CR1_SSM
-#define SPI_FirstBit_MSB ((uint16_t)0x0000)
-#define SPI_CR1_SSM ((uint16_t)0x0200)
+//#define SPI_Direction_1Line_Tx ((uint16_t)0xC000)
+//#define SPI_Mode_Master ((uint16_t)0x0104)
+//#define SPI_DataSize_8b ((uint16_t)0x0700)
+//#define SPI_CPOL_Low ((uint16_t)0x0000)
+//#define SPI_CPHA_1Edge ((uint16_t)0x0000)
+//#define SPI_NSS_Soft SPI_CR1_SSM
+//#define SPI_FirstBit_MSB ((uint16_t)0x0000)
+//#define SPI_CR1_SSM ((uint16_t)0x0200)
 
 /******************************************** Initialization Functions (MIGHT NOT BE NEEDED)**************************************************/
 
@@ -67,10 +67,10 @@ void myGPIOB_Init(void);
 void myTIM2_Init(void);
 void myTIM3_Init(void);
 void mySPI_Init(void);
-void myEXTI_Init(void);
 void myADC_Init(void);
 void myDAC_Init(void);
 void myLCD_Init(void);
+void myEXTI_Init(void);
 
 /******************************************** Functions (MIGHT NOT BE NEEDED) **************************************************/
 uint32_t ADC_pot();
@@ -88,6 +88,7 @@ uint32_t pulse_count = 0;
 uint32_t adc_offset = 0;
 uint8_t LCD_command = 0x00;
 uint8_t LCD_char = 0x40;
+uint16_t res =0;
 
 /******************************************** Main Code **************************************************/
 
@@ -104,25 +105,6 @@ int main(int argc, char* argv[]) {
 	myADC_Init();		/* Initialize ADC */
 	myDAC_Init();		/* Initialize DAC */
 	myLCD_Init();		/* Initialize LCD */
-
-	set_Address(0, 0);
-	mySPI_sendControl('F', LCD_char);
-	mySPI_sendControl(':', LCD_char);
-	set_Address(0, 6);
-	mySPI_sendControl('H', LCD_char);
-	mySPI_sendControl('z', LCD_char);
-
-	set_Address(1, 0);
-	mySPI_sendControl('R', LCD_char);
-	mySPI_sendControl(':', LCD_char);
-
-	set_Address(1, 6);
-	mySPI_sendControl('O', LCD_char);
-	mySPI_sendControl('h', LCD_char);
-
-	trace_printf("\nShould be displayed\n");
-
-	write_Res(1234);
 
 	myEXTI_Init();		/* Initialize EXTI, this also includes starting the ADC and DAC. */
 
@@ -190,16 +172,17 @@ void myADC_Init(){
 
 
 	//Configure ADC: continuous and overrun
-	ADC1->CFGR1 |= ADC_CFGR1_OVRMOD;				//overrun
-	ADC1->CFGR1 |= ADC_CFGR1_DISCEN;				//continuous
-	ADC1->CFGR1 &= ~ADC_CFGR1_EXTEN;				//Ensure interrupts are disabled
+	ADC1->CFGR1 |= (ADC_CFGR1_DISCEN | ADC_CFGR1_OVRMOD);				//overrun
+	//ADC1->CFGR1 |= ADC_CFGR1_DISCEN;				//continuous
 
 	//Select operating channel (output pin) - ADC_IN0
 	ADC1->CHSELR = ADC_CHSELR_CHSEL0;				//Channel IN0 is selected to be converted
+	ADC1->CFGR1 &= ~ADC_CFGR1_EXTEN;				//Ensure interrupts are disabled
+
 	ADC1->CR |= ADC_CR_ADEN;						//Enabled ADC
 
 	//trace_printf("\nADC IS IN DA HOUSE\n");
-	while(!(ADC1->ISR &ADC_ISR_ADRDY));						// True when not ready for conversion
+	while(!(ADC1->ISR & ADC_ISR_ADRDY));						// True when not ready for conversion
 	//trace_printf("\nADC IS IN DA HOUSE\n");
 	trace_printf("\nADC Initialized\n");
 }
@@ -274,7 +257,7 @@ void myTIM3_Init(){
 
 	RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;			//Enable clock for TIM3 peripheral. Relevant register: RCC->APB1ENR
 
-	TIM3->CR1 = 0x10; 				// Relevant register: TIM3->CR1
+	TIM3->CR1 = 0x10; 							// Relevant register: TIM3->CR1
 	TIM3->PSC = myTIM3_PRESCALER; 				// Set clock prescaler value
 	trace_printf("\nTIM 3 Initialized\n");
 }
@@ -283,35 +266,17 @@ void myTIM3_Init(){
 // Initialize  LCD. need to change to 4bit Mode
 void myLCD_Init(){
 	//trace_printf("\nLCD Initializing\n");
-	/*
-	mySPI_SendData(0x03);
-	mySPI_SendData(0x83);
-	mySPI_SendData(0x03);
-
-	Delay(6);
-
-	mySPI_SendData(0x03);
-	mySPI_SendData(0x83);
-	mySPI_SendData(0x03);
-
-	Delay(2);
-
-	mySPI_SendData(0x03);
-	mySPI_SendData(0x83);
-	mySPI_SendData(0x03);
-
-	mySPI_SendData(0x02);
-	mySPI_SendData(0x82);
-	mySPI_SendData(0x02); */
-
 	mySPI_sendControl(0x20, LCD_command); // set to 4-bit mode
-	Delay(1);
+	Delay(2);
 	mySPI_sendControl(0x28, LCD_command);
+	Delay(2);
 	mySPI_sendControl(0x0C, LCD_command);
+	Delay(2);
 	mySPI_sendControl(0x06, LCD_command);
+	Delay(2);
 	mySPI_sendControl(0x01, LCD_command);
 
-	//Delay(1);
+	Delay(1);
 	trace_printf("\nLCD Initialized\n");
 }
 
@@ -371,18 +336,17 @@ void mySPI_SendData(uint8_t data) {
 
 	while((SPI1->SR & SPI_SR_BSY) == 1);		/* Wait until SPI1 is not busy (BSY = 0) */
 
-	Delay(1);
-	GPIOB->BRR = GPIO_Pin_4;					/* Force your LCK signal to 1 */
-	Delay(2);
+	//Delay(1);
+	GPIOB->BSRR = GPIO_Pin_4;					/* Force your LCK signal to 1 */
+	//Delay(2);
 	//trace_printf("\nSend DATA Success.\n");
 }
 
 //checked
 void mySPI_sendControl(uint8_t location, uint8_t type){ //sends LCD control commands including addressing, clearing,
 	//trace_printf("\nSend Control start \n");
-
 	uint8_t lowhalf = (0x0F & location); 		// generate lowhalf address
-	uint8_t highhalf = (0x0F & (location>>4)); 	// generate highhalf address. Shifted 4 to left
+	uint8_t highhalf = (0x0F & (location >> 4)); 	// generate highhalf address. Shifted 4 to left
 
 
 	mySPI_SendData((type | highhalf)); 	// disable LCD, push type, highhalf,
@@ -401,21 +365,8 @@ void mySPI_sendControl(uint8_t location, uint8_t type){ //sends LCD control comm
 void write_Freq(uint32_t frequency){ // ( AKA_ write High Part of LCD) takes in frequency and displays it.
 
 	// ADD STATEMENT FOR FREQ = 0 CASE.
-
-	set_Address(0, 2);
-		char buffer[5];
-		itoa(frequency, buffer, 10);
-		if(frequency < 1000){
-			buffer[3] = ' ';
-		}
-		uint8_t i = 0;
-		while(i < 4){
-			mySPI_sendControl(buffer[i], LCD_char);
-			i++;
-		}
-
 	//trace_printf("\nWriting on the Frequency\n");
-	/*set_Address(0,0);
+	set_Address(0,0);
 	char disp[9];
 	char freq_buffer[4];
 	uint32_t temp =(uint32_t) frequency;
@@ -435,33 +386,12 @@ void write_Freq(uint32_t frequency){ // ( AKA_ write High Part of LCD) takes in 
 		//trace_printf("\n DISP: %c \n", disp[i]);
 		mySPI_sendControl(disp[i], 0x40);
 	}
-	//trace_printf("\n Freq written\n");*/
+
 }
 
 // ( AKA_ Write Low part of LCD) takes in resistance and displays it.
 //Checked
 void write_Res(uint32_t resistance){ // add statement for res=0 case.
-	//trace_printf("\nWriting on the Resistance\n");
-
-	set_Address(1, 2);
-		char buffer[5];
-		itoa(resistance, buffer, 10);
-		uint8_t i = 0;
-		if(resistance < 1000){
-			buffer[3] = ' ';
-		}
-		if(resistance < 100){
-			buffer[2] = ' ';
-		}
-		if(resistance < 10){
-			buffer[1] = ' ';
-		}
-
-		while(i < 4){
-			mySPI_sendControl(buffer[i], LCD_char);
-			i++;
-		}
-/*
 	set_Address(1,0);
 	char disp[8];
 	char res_buffer[4];
@@ -479,22 +409,19 @@ void write_Res(uint32_t resistance){ // add statement for res=0 case.
 	disp[7] =  'h';
 
 	for(int i=0; i<8; i++) {
-		trace_printf("\n RES: %c ", disp[i]);
+		//trace_printf("\n RES: %c ", disp[i]);
 		mySPI_sendControl(disp[i], 0x40);
 	}
 
-	//trace_printf("\n viva la reistance\n");*/
+
 }
 
 //Set the address for where to print on the LCD screen
 //checked
 void set_Address(uint8_t row, uint8_t column) {
-//	trace_printf("\nSetting address...\n");
 
 	uint8_t address = ((row*0x40) | (0x80+column));		//Since row is in 0x40 intervals and in order DDRAM address, DB7 must be 1
 	mySPI_sendControl(address, LCD_command);
-
-	//trace_printf("\nAddress all set\n");
 }
 
 //checked
@@ -517,27 +444,26 @@ void Delay(uint32_t time){ // delay the system. .... Time is in milliseconds
 
 /* This handler is declared in system/src/cmsis/vectors_stm32f0xx.c */
 void TIM2_IRQHandler() {
-	//trace_printf("\n Tim 2 is Interrupting you\n");
+
 	if ((TIM2->SR & TIM_SR_UIF) != 0) 	{ 				// Check if update interrupt flag is indeed set
 		trace_printf("\n*** Overflow! ***\n");
-		TIM2->SR &= ~(TIM_SR_UIF);						// Clear update interrupt flag. Relevant register: TIM2->SR. UIF : Update Interrupt flag
-		TIM2->CR1 |= TIM_CR1_CEN;		 				// Restart stopped timer. Relevant register: TIM2->CR1
+		TIM2->SR ^= (TIM_SR_UIF);						// Clear update interrupt flag. Relevant register: TIM2->SR. UIF : Update Interrupt flag
+		TIM2->CR1 |= 0x01;		 				// Restart stopped timer. Relevant register: TIM2->CR1
 	}
-	//trace_printf("\nScrew you Tim 2\n");
+
 }
 
 /* This handler is declared in system/src/cmsis/vectors_stm32f0xx.c */
 void EXTI0_1_IRQHandler(){
 	//trace_printf("\n EXTI 1 is Interrupting you\n");
-
-	EXTI->IMR &= ~EXTI_IMR_MR1; 						// Mask EXTI1 interrupt
+	//EXTI->IMR &= ~EXTI_IMR_MR1; 						// Mask EXTI1 interrupt
 
 	uint32_t freq = 0;
 	uint32_t pulse_count = 0;
 
 	if ((EXTI->PR & EXTI_PR_PR1) != 0) {  				// Check if EXTI1 interrupt pending flag is indeed set
-														/* if entered interupt and edge was detected. Therefore to keep track edge counter is incremented.
-														If first interrupt thrown, edge = 1 enter first statment. Else its end of signal edge = 2 and enter second statement*/
+														// if entered interupt and edge was detected. Therefore to keep track edge counter is incremented.
+														//If first interrupt thrown, edge = 1 enter first statment. Else its end of signal edge = 2 and enter second statement
 		if (edge == 0) {									// Check if this is first ege
 			TIM2 ->CNT = 0; 				// CLEAR COUNT REGISTER
 			TIM2 ->CR1 |= TIM_CR1_CEN;					// START THE TIMER
@@ -547,33 +473,23 @@ void EXTI0_1_IRQHandler(){
 			edge = 0;
 			pulse_count = TIM2 -> CNT;					//	- Read out count register (TIM2->CNT).
 			TIM2->CR1 = 0;					//	- Stop timer (TIM2->CR1).
-			trace_printf("  Pulses: %u \n \n",pulse_count);
+			//trace_printf("  Pulses: %u \n \n",pulse_count);
 			freq = (SystemCoreClock)/pulse_count;	//	- Calculate signal frequency.
 
-			trace_printf("\nThe Signal Parameters are as follow:\n");
-			trace_printf("  Signal Frequency: %u Hz\n \n",freq);	// Print calculated frequency and period.
+			//trace_printf("\nThe Signal Parameters are as follow:\n");
+			//trace_printf("  Signal Frequency: %u Hz\n \n",freq);	// Print calculated frequency and period.
 
-			//trace_printf("\n writing Frequency\n");
 			write_Freq(freq);
-			//trace_printf("\n Completed writing Frequency\n");
-
-			//trace_printf("\n writing Resistance\n");
-
-			uint32_t res = ADC_pot();
+			res = ADC_pot();
 			write_Res(res);
-			//trace_printf("\n Completed\n");
-
 
 		}
 
-		EXTI->PR |= EXTI_PR_PR1;				  		// Clear EXTI1 interrupt pending flag (EXTI->PR).
-		EXTI->IMR |= EXTI_IMR_MR1; 						// Unmask EXTI1 Flag
+		EXTI->PR ^= 0x20;				  		// Clear EXTI1 interrupt pending flag (EXTI->PR).
+		//EXTI->IMR |= EXTI_IMR_MR1; 						// Unmask EXTI1 Flag
 	}
 	//trace_printf("\n YOU WILL DO AMAZING\n");
 }
-
-
-
 
 #pragma GCC diagnostic pop
 
