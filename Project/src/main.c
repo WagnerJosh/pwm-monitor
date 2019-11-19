@@ -113,7 +113,6 @@ int main(int argc, char* argv[]) {
 
 	while (1){
 		// nothing going on here ...
-	;
 	}
 	return 0;
 }
@@ -481,7 +480,7 @@ void EXTI0_1_IRQHandler(){
 			trace_printf("  Signal Frequency: %u Hz\n \n",freq);	// Print calculated frequency and period.
 			write_Freq(freq);
 			Delay(5);
-			res = ADC_pot();
+			res = 1.221*ADC_pot(); // map the ADC value to the resistance value. 0-> 5K res = 0-> 4096 adc
 			write_Res(res);
 			Delay(5);
 		}
