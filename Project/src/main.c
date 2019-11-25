@@ -129,7 +129,7 @@ void myGPIOB_Init(){
     GPIOB->PUPDR &= ~(GPIO_PUPDR_PUPDR3); 		    // Ensure no pull-up/pull-down for PA1. Relevant register: GPIOB->PUPDR
 
     // Configure PB5 as SPI-MOSI:M17
-    GPIOB->MODER |= (GPIO_MODER_MODER5_1); 	        // Configure PB3 as alternate function. Relevant register: GPIOB->MODER. [11]
+    GPIOB->MODER |= (GPIO_MODER_MODER5_1); 	        // Configure PB5 as alternate function. Relevant register: GPIOB->MODER. [11]
     GPIOB->PUPDR &= ~(GPIO_PUPDR_PUPDR5);		    // Ensure no pull-up/pull-down for PA0. Relevant register: GPIOB->PUPDR
 
     // Configure PB4 as LCK:M25
@@ -304,10 +304,10 @@ void mySPI_SendData(uint8_t data) {
 
 }
 
-void mySPI_sendControl(uint8_t location, uint8_t type){ //Controls LCD. Sends addresses and Characters.
+void mySPI_sendControl(uint8_t word, uint8_t type){ //Controls LCD. Sends addresses and Characters.
 
-    uint8_t lowhalf = (0x0F & location); 			// generate lowhalf address
-    uint8_t highhalf = (0x0F & (location >> 4)); 	// generate highhalf address. Shifted 4 to left
+    uint8_t lowhalf = (0x0F & word); 			// generate lowhalf address
+    uint8_t highhalf = (0x0F & (word >> 4)); 	// generate highhalf address. Shifted 4 to left
 
 
     mySPI_SendData((type | highhalf)); 				// disable LCD, push type, highhalf,
