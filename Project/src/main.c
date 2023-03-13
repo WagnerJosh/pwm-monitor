@@ -4,12 +4,6 @@
 //
 // ----------------------------------------------------------------------------
 // School: University of Victoria, Canada.
-// Course: ECE 355 "Microprocessor-Based Systems".
-// This is template code for Part 2 of Introductory Lab.
-// Code written by:
-// 		Joshua Wagner V00822789
-//		Sam Kosman    V00823512
-//
 // See "system/include/cmsis/stm32f0xx.h" for register/bit definitions.
 // See "system/src/cmsis/vectors_stm32f0xx.c" for handler declarations.
 // ----------------------------------------------------------------------------
